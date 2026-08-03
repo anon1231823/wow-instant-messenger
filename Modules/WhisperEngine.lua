@@ -30,6 +30,7 @@ local playerRealm = GetRealmName();
 local GetPlayerInfoByGUID = GetPlayerInfoByGUID;
 local FlashClientIcon = FlashClientIcon;
 local ChatFrameUtil = ChatFrameUtil;
+local InCombatLockdown = InCombatLockdown;
 
 -- set name space
 setfenv(1, WIM);
@@ -436,7 +437,9 @@ function GetLastWhisperWindow (sent)
 		if win then
 			win.widgets.msg_box.setText = 1;
 			win:Pop(true); -- force popup
-			win.widgets.msg_box:SetFocus();
+			if (not InCombatLockdown()) then
+				win.widgets.msg_box:SetFocus();
+			end
 		end
 		return win;
 	end
@@ -846,10 +849,19 @@ local function editBoxUpdateHeader(self, internalCall)
 	prevChatType, prevTellTarget = chatType, tellTarget;
 
 	if (chatType == "WHISPER" or chatType == "BN_WHISPER") then
+		-- Upstream 3.16.14 fix (issue #258), ported into this fork: ambiguate
+		-- names intercepted from slash commands so that "Name-Realm" and
+		-- "Name" resolve to the same WIM window instead of opening a second
+		-- one.
+		-- Upstream 3.16.16 fix, ported into this fork: guard the Ambiguate
+		-- call. _G.Ambiguate() throws on a nil argument, which happens when a
+		-- slash command is issued with no target at all.
 		local target = tellTarget and _G.Ambiguate(tellTarget, "none");
 
-		-- handle the whisper interception
-		if (not InChatMessagingLockdown() and target and db and db.enabled) then
+		-- Handle the whisper interception. Skipped during combat:
+		-- SetAttribute and ChatEdit_UpdateHeader on Blizzard's secure
+		-- EditBox are forbidden then.
+		if (not InChatMessagingLockdown() and not InCombatLockdown() and target and db and db.enabled) then
 			local curState = curState;
 			curState = db.pop_rules.whisper.alwaysOther and "other" or curState;
 			if (db.pop_rules.whisper.intercept and db.pop_rules.whisper[curState].onSend) then
@@ -887,7 +899,7 @@ end
 
 -- ReplyTell and ReplyTell2 hooking
 local function replyTellHook (reTell, msg)
-	if (not InChatMessagingLockdown() and db and db.enabled) then
+	if (not InChatMessagingLockdown() and not InCombatLockdown() and db and db.enabled) then
 		local _tellTarget, _chatType = unpack(reTell and lastToldTarget or lastTellTarget or {});
 
 		if (HasAnySecretValues(_tellTarget, _chatType)) then
@@ -921,7 +933,7 @@ end
 
 local function sendBNetTell (tokenizedName)
 	-- used to close the editbox that is open.
-	if not InChatMessagingLockdown() and db and db.enabled then
+	if not InChatMessagingLockdown() and not InCombatLockdown() and db and db.enabled then
 
 		local curState = curState;
 		curState = db.pop_rules.whisper.alwaysOther and "other" or curState;
