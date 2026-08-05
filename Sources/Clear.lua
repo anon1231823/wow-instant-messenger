@@ -12,6 +12,15 @@ local function clearFun(sub)
             button1 = _G.YES,
             button2 = _G.NO,
             OnAccept = function()
+                -- 3.17.0: history now lives in several places -- the account-wide
+                -- blob archive, this character's own per-character file, and the
+                -- legacy holding pen. All of them must go, or the archive (or a
+                -- leftover legacy table) would repopulate the viewer on reload.
+                WIM_History = nil;
+                WIM_HistoryArchive = nil;
+                WIM_HistorySchema = nil;
+                -- pre-rename name, in case it was adopted this session and is
+                -- still resident in memory:
                 WIM3_History = nil;
                 ReloadUI();
             end,
@@ -27,7 +36,8 @@ local function clearFun(sub)
             button1 = _G.YES,
             button2 = _G.NO,
             OnAccept = function()
-                WIM3_Filters = nil;
+                WIM_Filters = nil;
+                WIM3_Filters = nil;   -- pre-rename name
                 ReloadUI();
             end,
             timeout = 0,
