@@ -359,7 +359,7 @@ RegisterShortcut("location", L["Player Location"], {
 			if(button == "LeftButton") then
 				local currentSelf = self;
 				self.parentWindow:SendWho(function()
-					buttons[currentSelf.index].scripts.OnEnter(currentSelf);
+					buttons[currentSelf.parentWindow.type or 'whisper'][currentSelf.index].scripts.OnEnter(currentSelf);
 					end, true)
 			else
 				WIM.MENU_ARMORY_USER = self.parentWindow.theUser;
