@@ -152,7 +152,7 @@ local function createGroup(title, list, maxButtons, showNone)
     group.title.bg = group.title:CreateTexture(nil, "BACKGROUND");
     group.title.bg:SetAllPoints();
     group.title.text = group.title:CreateFontString(nil, "OVERLAY", "ChatFontNormal");
-    local font = group.title.text:GetFont();
+    -- local font = group.title.text:GetFont();
     -- group.title.text:SetFont(font, 11, "");
     group.title.text:SetAllPoints();
     group.title.text:SetText(title.." ");
@@ -310,6 +310,8 @@ local function createMenu()
 			local group = self.groups[i];
 			group:ApplySkin(skin or GetSelectedSkin());
 		end
+
+		self:Refresh();
 	end
 
     menu:SetScript("OnUpdate", function(self)
