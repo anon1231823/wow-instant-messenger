@@ -18,6 +18,7 @@
 ## OptionalDeps: LibStub, CallbackHandler-1.0, LibSharedMedia-3.0, LibChatAnims
 ## X-Embeds: LibStub, CallbackHandler-1.0, LibSharedMedia-3.0, LibChatAnims
 ## SavedVariables: WIM_Data, WIM_Cache, WIM_Filters, WIM_ChatFilters, WIM_Alias, WIM_History, WIM_HistoryArchive, WIM_HistorySchema
+## SavedVariablesPerCharacter: WIM_DebugLog
 ## IconTexture: Interface\AddOns\WIM\Skins\Default\minimap
 
 Libs\Includes.xml
