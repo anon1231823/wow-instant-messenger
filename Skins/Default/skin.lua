@@ -303,6 +303,25 @@ local WIM_ClassicSkin = {
         },
         vertical = false,
     },
+	menu = {
+		edge = "Interface\\AddOns\\"..WIM.addonTocName.."\\Modules\\Textures\\Menu",
+		edge_size = 32,
+		background = "Interface\\AddOns\\"..WIM.addonTocName.."\\Modules\\Textures\\Menu_bg",
+		tile = true,
+		tile_size = 32,
+		insets = { left = 32, right = 32, top = 32, bottom = 32 },
+		title = {
+			font = "ChatFontNormal",
+			font_color = {1, 1, 1},
+			font_height = 11,
+			font_flags = ""
+		},
+		button = {
+			font = "FriendsFont_Normal",
+			font_height = 12,
+			font_flags = ""
+		}
+	},
     emoticons = {
         width = 0,
         height = 0,

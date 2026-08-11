@@ -6,8 +6,10 @@ local table = table;
 local pairs = pairs;
 local string = string;
 local select = select;
+local type = type;
 local math = math;
 local tonumber = tonumber;
+local unpack = unpack;
 local playerRealm = GetRealmName()
 local ChatFrameUtil = ChatFrameUtil;
 
@@ -2125,13 +2127,6 @@ local function createUserList()
     win:EnableMouse(true);
     win:Hide();
     win:SetPoint("CENTER");
-    -- set backdrop - Changes for Patch 9.0.1 - Shadowlands, retail and classic
-    win.backdropInfo = {bgFile = "Interface\\AddOns\\"..addonTocName.."\\Modules\\Textures\\Menu_bg",
-        edgeFile = "Interface\\AddOns\\"..addonTocName.."\\Modules\\Textures\\Menu",
-        tile = true, tileSize = 32, edgeSize = 32,
-        insets = { left = 32, right = 32, top = 32, bottom = 32 }};
-
-	win:ApplyBackdrop();
 
     win:SetWidth(200);
     win.title = _G.CreateFrame("Frame", win:GetName().."Title", win);
@@ -2187,6 +2182,54 @@ local function createUserList()
     win.scroll:SetScript("OnVerticalScroll", function(self, offset)
         _G.FauxScrollFrame_OnVerticalScroll(self, offset, win.buttons[1]:GetHeight(), win.updateList);
     end);
+
+	win.ApplySkin = function(self, skin)
+		skin = skin or GetSelectedSkin();
+
+		-- set backdrop - changes for Patch 9.0.1 - Shadowlands, retail and classic
+    	self.backdropInfo = {
+			bgFile = skin.menu.background,
+        	edgeFile = skin.menu.edge,
+        	tile = skin.menu.tile,
+			tileSize = skin.menu.tile_size,
+			edgeSize = skin.menu.edge_size,
+        	insets = {
+				left = skin.menu.insets.left,
+				right = skin.menu.insets.right,
+				top = skin.menu.insets.top,
+				bottom = skin.menu.insets.bottom
+			}
+		};
+
+		self:ApplyBackdrop();
+
+		-- title font
+		local font = _G[skin.menu.title.font]:GetFont();
+		self.title.text:SetFont(
+			font,
+			skin.menu.title.font_height,
+			skin.menu.title.font_flags
+		);
+
+		-- title color
+		if(type(skin.menu.title.font_color) == "table") then
+            self.title.text:SetTextColor(unpack(skin.menu.title.font_color));
+        else
+            self.title.text:SetTextColor(RGBHexToPercent(skin.menu.title.font_color));
+        end
+
+		-- buttons
+		for i=1, #self.buttons do
+			local button = self.buttons[i];
+
+			local font = _G[skin.menu.button.font]:GetFont();
+			button.text:SetFont(
+				font,
+				skin.menu.button.font_height,
+				skin.menu.button.font_flags
+			);
+		end
+	end
 
     win:SetScript("OnHide", function(self)
         self:Hide();
@@ -2273,8 +2316,18 @@ function ChatOptions:OnEnableWIM()
     --create user List
     if(not ChatUserList) then
         ChatUserList = createUserList();
+		ChatUserList:ApplySkin(skin);
     end
 end
+
+function ChatOptions:OnSkinLoaded(skin)
+	if(ChatUserList) then
+		ChatUserList:ApplySkin(skin);
+	end
+end
+
+ChatOptions.canDisable = false;
+ChatOptions:Enable();
 
 
 -- global reference
