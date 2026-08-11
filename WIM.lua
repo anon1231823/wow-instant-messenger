@@ -125,6 +125,11 @@ local function initialize()
     RegisterSlashCommand("enable", function() SetEnabled(not db.enabled) end, L["Toggle WIM 'On' and 'Off'."]);
     RegisterSlashCommand("debug", function() debug = not debug; end, L["Toggle Debugging Mode 'On' and 'Off'."]);
     FRIENDLIST_UPDATE(); -- pretend event has been fired in order to get cache loaded.
+
+	if (GetSelectedSkin().title ~= db.skin.selected) then
+		LoadSkin(GetSelectedSkin().title, true);
+	end
+
     CallModuleFunction("OnInitialized");
     WindowParent:Show();
     dPrint("WIM initialized...");

@@ -228,14 +228,16 @@ function GetSelectedSkin()
     return SelectedSkin or SkinTable["WIM Classic"];
 end
 
-function LoadSkin(skinName)
+function LoadSkin(skinName, immutableDB)
     if(skinName == nil or (not SkinTable[skinName])) then
         skinName = "WIM Classic";
     end
 
     SelectedSkin = SkinTable[skinName];
 
-    db.skin.selected = skinName;
+    if not immutableDB then
+        db.skin.selected = skinName;
+    end;
 
     SKIN_DEBUG = SKIN_DEBUG..skinName.." loaded..\n";
     -- apply skin to window objects
