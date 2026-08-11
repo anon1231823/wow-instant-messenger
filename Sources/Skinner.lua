@@ -243,6 +243,8 @@ function LoadSkin(skinName)
     for i=1, table.getn(window_objects) do
         ApplySkinToWindow(window_objects[i].obj);
     end
+
+	CallModuleFunction("OnSkinLoaded", SelectedSkin);
 end
 
 function RegisterFont(objName, title)
