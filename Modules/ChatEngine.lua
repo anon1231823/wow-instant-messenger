@@ -2222,7 +2222,7 @@ local function createUserList()
 		for i=1, #self.buttons do
 			local button = self.buttons[i];
 
-			local font = _G[skin.menu.button.font]:GetFont();
+			font = _G[skin.menu.button.font]:GetFont();
 			button.text:SetFont(
 				font,
 				skin.menu.button.font_height,
