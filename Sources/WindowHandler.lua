@@ -24,6 +24,7 @@ local IsShiftKeyDown = IsShiftKeyDown;
 local select = select;
 local pairs = pairs;
 local type = type;
+local tostring = tostring;
 local unpack = unpack;
 local strsub = strsub;
 local time = time;
@@ -32,6 +33,7 @@ local GetGuildInfo = GetGuildInfo;
 local UnitClass = UnitClass;
 local UnitLevel = UnitLevel;
 local UnitRace = UnitRace;
+local InCombatLockdown = InCombatLockdown;
 
 -- set namespace
 setfenv(1, WIM);
@@ -1013,7 +1015,15 @@ local function instantiateWindow(obj)
 						);
 
 
-						self.theUser = _G.ChatFrameUtil.GetCommunityAndStreamName(self.clubId, self.streamId)
+						-- Only take the resolved name when there is one. Early in a
+						-- session GetCommunityAndStreamName can return empty, and
+						-- theUser must never become nil: it is the identity every
+						-- list and lookup displays.
+						local resolved = _G.ChatFrameUtil.GetCommunityAndStreamName(self.clubId, self.streamId);
+						dPrint("Community name resolve ["..tostring(self.clubId)..":"..tostring(self.streamId).."]: '"..tostring(resolved).."'");
+						if (type(resolved) == "string" and string.gsub(resolved, "[%s%-]", "") ~= "") then
+							self.theUser = resolved;
+						end
 						self.widgets.from:SetText(self.theUser);
 						self.widgets.from:SetTextColor(color.r, color.g, color.b);
 					end
@@ -1253,18 +1263,18 @@ local function instantiateWindow(obj)
 	if(forceResult == true) then
 		-- go by forceResult and ignore rules
 		if(self.tabStrip) then
-			-- if(not EditBoxInFocus) then
-					ShowContainer();
-					self.tabStrip:JumpToTab(self);
-					if(not getVisibleChatFrameEditBox() and (rules.autofocus or forceFocus)) then
-							self.widgets.msg_box:SetFocus();
-					end
-			-- end
+                                -- if(not EditBoxInFocus) then
+                                                ShowContainer();
+                                                self.tabStrip:JumpToTab(self);
+                                                if(not InCombatLockdown() and not getVisibleChatFrameEditBox() and (rules.autofocus or forceFocus)) then
+                                                        self.widgets.msg_box:SetFocus();
+                                                end
+                                -- end
 		else
                                 ShowContainer();
 				self:ResetAnimation();
 				self:Show();
-                                if((not getVisibleChatFrameEditBox() and not EditBoxInFocus and rules.autofocus) or forceFocus) then
+                                if(not InCombatLockdown() and ((not getVisibleChatFrameEditBox() and not EditBoxInFocus and rules.autofocus) or forceFocus)) then
                                         self.widgets.msg_box:SetFocus();
                                 end
 				local count = 0;
@@ -1292,7 +1302,7 @@ local function instantiateWindow(obj)
 				self:Show();
                                 setWindowAsFadedIn(self);
 			end
-                        if(self:IsVisible() and not getVisibleChatFrameEditBox and not EditBoxInFocus and rules.autofocus) then
+                        if(not InCombatLockdown() and self:IsVisible() and not getVisibleChatFrameEditBox() and not EditBoxInFocus and rules.autofocus) then
                                 self.widgets.msg_box:SetFocus();
                         end
 		end
@@ -1347,18 +1357,18 @@ local function instantiateWindow(obj)
 		if(type(widgetObj.UpdateProps) == "function") then
 			widgetObj:UpdateProps();
 		end
-
-		if(widgetObj.type) then
-				if(widgetObj.enabled and string.match(widgetObj.type, obj.type)) then
-						widgetObj:Show();
-						local w, h = widgetObj:GetWidth(), widgetObj:GetHeight();
-						minWidth = _G.math.max(minWidth, (self:SafeGetLeft() - widgetObj:GetLeft()) + w + (widgetObj:GetRight() - self:SafeGetRight()));
-						-- Commenting this line out so widgets don't limit the min height.
-						-- minHeight = _G.math.max(minHeight, (self:SafeGetTop() - widgetObj:GetTop() - WindowParent:GetBottom()) + h + (widgetObj:GetBottom() - self:SafeGetBottom() - WindowParent:GetBottom()));
-				else
-						widgetObj:Hide()
-				end
-		end
+                if(widgetObj.type) then
+                        if(widgetObj.enabled and string.match(widgetObj.type, obj.type)) then
+                                widgetObj:Show();
+                                local w, h = widgetObj:GetWidth(), widgetObj:GetHeight();
+                                minWidth = _G.math.max(minWidth, (self:SafeGetLeft() - widgetObj:GetLeft()) + w + (widgetObj:GetRight() - self:SafeGetRight()));
+                                -- Upstream 3.16.13 (credit: 3aptist), ported into this fork:
+                                -- commented out so widgets don't limit the min height.
+                                -- minHeight = _G.math.max(minHeight, (self:SafeGetTop() - widgetObj:GetTop() - WindowParent:GetBottom()) + h + (widgetObj:GetBottom() - self:SafeGetBottom() - WindowParent:GetBottom()));
+                        else
+                                widgetObj:Hide()
+                        end
+                end
 	end
 		if self.SetResizeBounds then -- WoW 10.0
 			self:SetResizeBounds(minWidth, minHeight);

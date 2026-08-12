@@ -270,6 +270,11 @@ local function createMenu()
         end);
     menu:SetScript("OnShow", function(self)
             self.mouseStamp = _G.time();
+            -- Labels can change after a window is created. A community
+            -- window is renamed from its clubId:streamId key to the real
+            -- community name one line after OnWindowCreated refreshed this
+            -- menu, so rebuild the labels every time the menu opens.
+            self:Refresh();
             libs.DropDownMenu.CloseDropDownMenus();
         end);
 

@@ -142,6 +142,48 @@ local function initialize()
             _G.DEFAULT_CHAT_FRAME:AddMessage("WIM debug "..desc
                 ..(level > 0 and " - captured to SavedVariablesPerCharacter (WIM_DebugLog), written on logout or /reload." or "."));
         end, L["Set debugging level: /wim debug [0|1|2]. 2 adds verbose chat event tracing."]);
+    RegisterSlashCommand("focusstreams", function()
+            -- Diagnostic A/B switch. With this off WIM leaves community stream
+            -- focusing entirely to the client, which lets the client's own
+            -- focusing be compared against WIM's. See
+            -- INVESTIGATION-community-send-failure.md §19.
+            local c = db and db.chat and db.chat.community;
+            if(not c) then
+                _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: community chat settings unavailable.");
+                return;
+            end
+            c.autoFocusStreams = not (c.autoFocusStreams ~= false);
+            _G.DEFAULT_CHAT_FRAME:AddMessage("WIM community stream auto-focus "
+                ..(c.autoFocusStreams and "ON" or "OFF - the client may refuse sends to community channels")
+                ..". Takes effect at next login.");
+        end, L["Toggle whether WIM focuses community streams at login."]);
+    RegisterSlashCommand("channelrepair", function()
+            -- Opt-in. This is the only thing in WIM that mutates the user's chat
+            -- window channel configuration, which is saved and survives logout,
+            -- so it is never enabled without an explicit request.
+            local c = db and db.chat and db.chat.community;
+            if(not c) then
+                _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: community chat settings unavailable.");
+                return;
+            end
+            c.repairChannelReadd = not (c.repairChannelReadd == true);
+            if(c.repairChannelReadd) then
+                _G.DEFAULT_CHAT_FRAME:AddMessage("WIM channel re-add repair ON (experimental)."
+                    .." On logins where the community stream is focused late, WIM removes and"
+                    .." re-adds community channels to ChatFrame1 about 8s after login."
+                    .." If a re-add fails the channel must be restored from the chat settings UI.");
+                -- Run one now. The flag is read when the timer fires rather than
+                -- when it is scheduled, so enabling mid-session could already
+                -- trigger a run -- better to make that explicit than surprising,
+                -- and it lets the call signature be probed on demand.
+                if(TryCommunityChannelReadd) then
+                    _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: attempting a repair now (see /wim debug output).");
+                    TryCommunityChannelReadd();
+                end
+            else
+                _G.DEFAULT_CHAT_FRAME:AddMessage("WIM channel re-add repair OFF. No further attempts this session.");
+            end
+        end, L["Toggle the experimental community channel re-add repair (mutates chat window channels)."]);
     RegisterSlashCommand("debugclear", function()
             if(_G.WIM_DebugLog) then
                 _G.WIM_DebugLog.lines = {};

@@ -2,6 +2,9 @@
 local WIM = WIM;
 local _G = _G;
 local hooksecurefunc = hooksecurefunc;
+local tostring = tostring;
+local type = type;
+local pcall = pcall;
 local table = table;
 local pairs = pairs;
 local string = string;
@@ -90,6 +93,15 @@ db_defaults.chat = {
     },
 	community = {
         enabled = false,
+        -- Whether WIM focuses community streams itself at login. On by default:
+        -- without it the client refuses sends to community-backed channel
+        -- numbers (see Channel:FocusCommunityStreams). Exposed as a setting only
+        -- so the pass can be A/B tested against the client's own focusing, which
+        -- is the open question in INVESTIGATION-community-send-failure.md §19.
+        autoFocusStreams = true,
+        -- Opt-in only: see readdCommunityChannels. Mutates saved chat window
+        -- configuration, so it stays off unless explicitly enabled.
+        repairChannelReadd = false,
         channelSettings = {}
     },
     guild = {
@@ -1334,6 +1346,17 @@ function Channel:OnEnable()
 		_G.ChatFrame_AddMessageEventFilter('CHAT_MSG_CHANNEL', Channel.ChatMessageEventFilter);
 		_G.ChatFrame_AddMessageEventFilter('CHAT_MSG_COMMUNITIES_CHANNEL', Channel.ChatMessageCommunitiesEventFilter);
 	end
+
+	-- See FocusCommunityStreams below. The channel list is not complete at
+	-- login; streams keep arriving for several seconds. The focus pass
+	-- therefore runs again on every channel list update, not just once.
+	self:RegisterEvent("PLAYER_ENTERING_WORLD");
+	self:RegisterEvent("CHANNEL_UI_UPDATE");
+	-- Ownership signals: CLUB_STREAMS_LOADED opens the grace period,
+	-- CLUB_STREAM_SUBSCRIBED tells the pass it has nothing left to do.
+	pcall(self.RegisterEvent, self, "CLUB_STREAMS_LOADED");
+	pcall(self.RegisterEvent, self, "CLUB_STREAM_SUBSCRIBED");
+	self:FocusCommunityStreams();
 end
 
 function Channel:OnDisable()
@@ -1346,16 +1369,477 @@ function Channel:OnDisable()
 	end
 end
 
+-- 3.18.0: WIM's presence stops the client focusing community streams at login,
+-- and an unfocused stream cannot be sent to.
+--
+-- Verified in-game 2026-08-11:
+--   * WIM disabled entirely -- /2 and every other community channel send fine
+--     as the very first action after login.
+--   * WIM enabled -- the client refuses with "Couldn't send message.", and so
+--     does a direct C_Club.SendMessage(clubId, streamId, msg) run from a macro.
+--     That call never touches the editbox, which rules out every theory that
+--     blamed the send path or WIM's ChatEdit_GetActiveWindow replacement.
+--   * WIM enabled, C_Club.FocusStream(clubId, streamId) run before the first
+--     send -- the send succeeds AND the message appears in the default chat
+--     frame, which it otherwise never did.
+--
+-- One unfocused stream therefore caused both symptoms. Opening the Guild &
+-- Communities panel appeared to fix it only because the panel focuses the
+-- stream as a side effect.
+--
+-- WHY WIM stops the client doing this itself is still unknown -- WIM never
+-- calls FocusStream, never loads Blizzard_Communities and declares no
+-- dependency on it. So this is remediation, not a root-cause fix; see
+-- INVESTIGATION-community-send-failure.md. It is safe regardless: focusing a
+-- stream the client already lists as a numbered chat channel is precisely what
+-- the unmodified client does, so this restores the no-addon baseline rather
+-- than inventing new behaviour. It is deliberately NOT limited to streams WIM
+-- monitors -- the client refuses sends to unmonitored community channels just
+-- the same, and WIM should not silently change which channels work.
+-- 2026-08-11: focusing a stream AFTER the client has finished loading that
+-- club's stream data stops the client routing the stream's messages to
+-- CHAT_MSG_COMMUNITIES_CHANNEL, so the message sends but never reaches the
+-- default chat frame. Three captures agree:
+--
+--   focus 20:04:56, streams loaded 20:04:57  -> event fires, message displays
+--   focus 20:11:22, streams loaded 20:11:21  -> event absent, no display
+--   no focus at all,  streams loaded 20:21:15 -> event fires, twice
+--
+-- Which side of CLUB_STREAMS_LOADED the focus pass lands on is decided by
+-- whether CHANNEL_UI_UPDATE happens to arrive first, so before this gate the
+-- outcome was effectively a coin flip -- the "intermittent suppression" that
+-- cost several rounds of investigation to pin down.
+--
+-- Three controlled logins settled it, and the margin is tiny:
+--
+--   streams loaded 20:37:24.169, focus 20:37:24.676  (+507ms)  -> NO display
+--   focus 20:37:59.069, streams loaded 20:37:59.197  (-128ms)  -> displays
+--   streams loaded 20:38:54.074, focus 20:38:54.087  (+13ms)   -> NO display
+--
+-- Thirteen milliseconds on the wrong side of CLUB_STREAMS_LOADED is enough. And
+-- an earlier capture with the pass gated off entirely still lost display, when
+-- nothing subscribed the stream for 29 seconds and the Guild & Communities panel
+-- eventually did it -- so a late subscription fails to wire chat routing however
+-- it arrives, ours or the panel's. The client's own prompt subscription is the
+-- only thing observed to wire it.
+--
+-- So focus early or not at all. Focusing after the club's stream data has loaded
+-- buys a working send at the cost of the default chat frame.
+--
+-- Both ways of avoiding that cost were tried against the live client and both
+-- were worse:
+--
+--   * Standing down at CLUB_STREAMS_LOADED -- the client then does not subscribe
+--     on its own and the user cannot send at all, which is the original bug.
+--   * A 3s grace period before falling back -- across three logins the client
+--     took the window zero times, and one send issued during the wait was
+--     silently refused. It cost sends and bought nothing.
+--
+-- The client's own prompt subscription has been observed exactly once in a dozen
+-- captures. It is not something to wait for. So: focus as soon as the stream is
+-- visible in the channel list, and accept losing the default chat frame on the
+-- logins where the channel list populates after CLUB_STREAMS_LOADED.
+--
+-- That last part is a client ordering WIM cannot influence -- a stream cannot be
+-- focused before it exists in the channel list. Sending is a hard failure and
+-- outranks a missing copy in a frame the addon exists to replace; the message
+-- always reaches WIM's own window.
+local clubStreamsLoaded = {};
+local subscribedStreams = {};
+local focusedStreams = {};
+
+-- Capability probe, logged once. Recording which functions this client
+-- build offers beats guessing at API names; whether a late focus can be
+-- repaired depends on what exists here.
+local probed = false;
+local channelsLogged = false;
+local function probeClubCapabilities()
+	if (probed) then
+		return;
+	end
+	probed = true;
+
+	local names = {
+		"C_Club.FocusStream", "C_Club.UnfocusStream", "C_Club.IsSubscribedToStream",
+		"C_Club.GetStreamInfo", "C_Club.GetSubscribedClubs", "C_Club.GetStreams",
+		"ChatFrame_AddChannel", "ChatFrame_RemoveChannel",
+		"ChatFrame_AddCommunitiesChannel", "ChatFrame_RemoveCommunitiesChannel",
+		"ChatFrame_AddNewCommunitiesChannel",
+		"ChatFrameUtil.AddChannel", "ChatFrameUtil.RemoveChannel",
+		"ChatFrameUtil.AddCommunitiesChannel", "ChatFrameUtil.AddNewCommunitiesChannel",
+	};
+
+	local have, missing = {}, {};
+	for i = 1, #names do
+		local path = names[i];
+		local owner, member = string.match(path, "^(.-)%.(.*)$");
+		local fn;
+		if (owner) then
+			local t = _G[owner];
+			fn = (type(t) == "table") and t[member] or nil;
+		else
+			fn = _G[path];
+		end
+		table.insert((type(fn) == "function") and have or missing, path);
+	end
+
+	dPrint("Club API probe -- present: "..(#have > 0 and table.concat(have, ", ") or "(none)"));
+	dPrint("Club API probe -- absent:  "..(#missing > 0 and table.concat(missing, ", ") or "(none)"));
+end
+
+-- DISPROVEN 2026-08-11: unfocus + re-focus does not recover chat routing. Three
+-- late logins ran the repair, every stream reported "re-focus -> ok", and
+-- CHAT_MSG_COMMUNITIES_CHANNEL still never fired. Lateness is intrinsic to the
+-- focus operation, not a recoverable state, so the repair was removed rather than
+-- left in to churn stream state for no benefit.
+--
+-- The capability probe did show a stronger lever exists on this client:
+-- ChatFrame_RemoveCommunitiesChannel and ChatFrame_AddCommunitiesChannel are both
+-- present. Before using them -- they mutate the user's chat window configuration,
+-- which this addon has never done -- logChatFrameChannels below establishes
+-- whether the chat frames' channel lists actually differ between a late login and
+-- an early one. If they are identical, re-adding the channel cannot be the fix
+-- either, and the mutation would be risk taken for nothing.
+local function logChatFrameChannels(tag)
+	for i = 1, (_G.NUM_CHAT_WINDOWS or 10) do
+		local frame = _G["ChatFrame"..i];
+		local list = frame and frame.channelList;
+		if (type(list) == "table" and #list > 0) then
+			local parts = {};
+			for j = 1, #list do
+				parts[#parts + 1] = tostring(list[j]);
+			end
+			tPrint("ChannelList ["..tag.."] ChatFrame"..i..": "..table.concat(parts, ", "));
+		elseif (frame and list == nil and i == 1) then
+			tPrint("ChannelList ["..tag.."] ChatFrame1: channelList is nil");
+		end
+	end
+end
+
+-- Opt-in experiment: re-add the community channel to the chat frames.
+--
+-- The channel-list dumps were byte-identical on late and early logins,
+-- so the channel is registered in ChatFrame1 either way and a missing
+-- registration is not the explanation. What re-running the add tests is
+-- whether it re-wires routing now that the stream is subscribed: the
+-- client wires routing when a community channel is added to a frame, and
+-- on a late login that add happened while the stream was still
+-- unsubscribed.
+--
+-- Off by default, and it stays off unless the user runs
+-- /wim channelrepair. This is the only code in the addon that mutates
+-- the user's chat window configuration, that configuration survives
+-- logout, and a failed re-add loses the channel from the frame until the
+-- user adds it back through the chat settings. That is a real cost, and
+-- not one to impose by default.
+--
+-- Safety: the list is captured before and after, the add is verified,
+-- and a fallback implementation is tried before giving up loudly.
+local lateFocusHappened = false;
+local channelReaddAttempted = false;
+
+local function frameHasChannel(frame, name)
+	local list = frame and frame.channelList;
+	if (type(list) ~= "table") then
+		return false;
+	end
+	for i = 1, #list do
+		if (list[i] == name) then
+			return true;
+		end
+	end
+	return false;
+end
+
+local function readdCommunityChannels(force)
+	if (channelReaddAttempted or (not lateFocusHappened and not force)) then
+		return;
+	end
+	if (not db or db.chat.community.repairChannelReadd ~= true) then
+		return;
+	end
+
+	local add = _G.ChatFrame_AddCommunitiesChannel
+	            or (_G.ChatFrameUtil and _G.ChatFrameUtil.AddCommunitiesChannel);
+	if (not add) then
+		dPrint("Channel re-add: unavailable on this client.");
+		channelReaddAttempted = true;
+		return;
+	end
+
+	local frame = _G.ChatFrame1;
+	local list = frame and frame.channelList;
+	if (type(list) ~= "table" or #list == 0) then
+		return;   -- not populated yet; a later pass will catch it
+	end
+	channelReaddAttempted = true;
+
+	-- Snapshot the names first: the list is mutated as we go.
+	local targets = {};
+	for i = 1, #list do
+		if (type(list[i]) == "string" and string.match(list[i], "^Community:")) then
+			targets[#targets + 1] = list[i];
+		end
+	end
+	if (#targets == 0) then
+		return;
+	end
+
+	logChatFrameChannels("before re-add");
+
+	-- Signature notes, each learned from a capture:
+	--   add(frame, name)                  -> :905 index nil 'channelColor'
+	--   add(frame, clubId, streamId)      -> :57  index number 'communityChannel'
+	--   add(frame, name, {r=,g=,b=})      -> :905 attempt to call a nil value
+	-- The third shows channelColor is a color object with methods, not a
+	-- plain table, so it needs CreateColor.
+	--
+	-- The remove stays. With the remove present, one late login recovered
+	-- display; with the add alone, three consecutive late logins did not.
+	-- The remove changes nothing in channelList, so its effect is
+	-- internal, but the evidence says the remove, not the add, re-wires
+	-- routing.
+	local remove = _G.ChatFrame_RemoveCommunitiesChannel;
+
+	local function makeColor()
+		local info = _G.ChatTypeInfo
+		             and (_G.ChatTypeInfo["COMMUNITIES_CHANNEL"] or _G.ChatTypeInfo["CHANNEL"]);
+		local r, g, b = 0.75, 0.75, 0.75;
+		if (info) then
+			r, g, b = info.r or r, info.g or g, info.b or b;
+		end
+		if (_G.CreateColor) then
+			return _G.CreateColor(r, g, b);
+		end
+		return {r = r, g = g, b = b};
+	end
+	local color = makeColor();
+
+	for i = 1, #targets do
+		local name = targets[i];
+		local clubId, streamId = string.match(name, "^Community:(%d+):(%d+)$");
+		local cid, sid = tonumber(clubId) or clubId, tonumber(streamId) or streamId;
+
+		if (remove) then
+			-- 12.1 note: the (frame, name) form now returns cleanly but
+			-- removes nothing, so pcall success proves nothing. Judge each
+			-- attempt by whether the channel actually left channelList.
+			-- FrameXML declares (chatFrame, clubId, streamId), so that
+			-- form goes first.
+			local okIds, errIds = pcall(remove, frame, cid, sid);
+			local removed = not frameHasChannel(frame, name);
+			local report = "(frame, clubId, streamId) "
+			               ..(okIds and "OK" or ("failed: "..tostring(errIds)))
+			               ..(removed and " -- removed" or " -- still listed");
+			if (not removed) then
+				local okName, errName = pcall(remove, frame, name);
+				removed = not frameHasChannel(frame, name);
+				report = report.." | (frame, name) "
+				         ..(okName and "OK" or ("failed: "..tostring(errName)))
+				         ..(removed and " -- removed" or " -- still listed");
+			end
+			dPrint("Channel re-add: remove "..name..": "..report);
+		end
+
+		-- Add back only if the remove actually took the channel out.
+		-- Adding unconditionally duplicates the entry, and the add does
+		-- nothing for routing anyway; three late logins with the add alone
+		-- all failed to display. This is a safety net, not the mechanism.
+		if (not frameHasChannel(frame, name)) then
+			-- The name+colour form is the one verified to restore the entry under
+			-- 12.1. The ids form is a last resort only: despite matching FrameXML's
+			-- declared add signature, in practice it registers a junk channel
+			-- literally named "<clubId>" (12.1 capture, 19:58:26).
+			local okAdd, errAdd = pcall(add, frame, name, color);
+			if (not frameHasChannel(frame, name)) then
+				local okIds, errIds = pcall(add, frame, cid, sid);
+				errAdd = "(frame, name, color) "
+				         ..(okAdd and "OK but not listed" or ("failed: "..tostring(errAdd)))
+				         .." | (frame, clubId, streamId) "
+				         ..(okIds and "OK but not listed" or ("failed: "..tostring(errIds)));
+			end
+			-- Strip the junk numeric entry if either attempt left one behind.
+			if (_G.ChatFrame_RemoveChannel and frameHasChannel(frame, tostring(cid))) then
+				pcall(_G.ChatFrame_RemoveChannel, frame, tostring(cid));
+				dPrint("Channel re-add: stripped junk channel entry '"..tostring(cid).."'.");
+			end
+			if (frameHasChannel(frame, name)) then
+				dPrint("Channel re-add: "..name.." was removed and has been restored.");
+			else
+				dPrint("Channel re-add: "..name.." was removed and could NOT be restored: "
+				       ..tostring(errAdd).." -- re-add it from the chat settings UI and run "
+				       .."/wim channelrepair to disable this.");
+			end
+		else
+			dPrint("Channel re-add: "..name.." still listed after remove; nothing to restore.");
+		end
+	end
+	logChatFrameChannels("after re-add");
+end
+
+-- CLUB_STREAM_SUBSCRIBED can fire before WIM loads, so the event table
+-- alone is not authoritative. Ask the client first where the query API
+-- exists.
+local function isStreamSubscribed(clubId, streamId)
+	if (subscribedStreams[clubId..":"..streamId]) then
+		return true;
+	end
+	if (_G.C_Club and _G.C_Club.IsSubscribedToStream) then
+		local ok, subscribed = pcall(_G.C_Club.IsSubscribedToStream,
+		                             tonumber(clubId) or clubId,
+		                             tonumber(streamId) or streamId);
+		return ok and subscribed or false;
+	end
+	return false;
+end
+
+-- Polls for the chat frames' channel lists becoming readable, then runs the
+-- repair once. Falls back to a single delayed attempt where NewTicker is absent.
+local readdTicker;
+local function startReaddPolling()
+	if (not _G.C_Timer) then
+		return;
+	end
+	if (not _G.C_Timer.NewTicker) then
+		if (_G.C_Timer.After) then
+			_G.C_Timer.After(8, function() readdCommunityChannels(); end);
+		end
+		return;
+	end
+	if (readdTicker) then
+		return;
+	end
+
+	-- 0.25s for up to 15s. The list has populated within ~10s in every capture.
+	local ticks = 0;
+	readdTicker = _G.C_Timer.NewTicker(0.25, function(self)
+		ticks = ticks + 1;
+		readdCommunityChannels();
+		if (channelReaddAttempted or ticks >= 60) then
+			if (not channelReaddAttempted) then
+				dPrint("Channel re-add: gave up waiting for the channel list to populate.");
+			end
+			self:Cancel();
+			readdTicker = nil;
+		end
+	end);
+end
+
+-- Manual trigger for /wim channelrepair, so the call signature can be
+-- tested without waiting for a late-focus login. Safe on a healthy login
+-- too: the add only runs after a successful remove, so a rejected call
+-- changes nothing.
+function TryCommunityChannelReadd()
+	channelReaddAttempted = false;
+	readdCommunityChannels(true);
+end
+
+function Channel:FocusCommunityStreams()
+	if (not _G.C_Club or not _G.C_Club.FocusStream or not _G.GetChannelList) then
+		return;
+	end
+	if (db and db.chat.community.autoFocusStreams == false) then
+		return;
+	end
+
+	probeClubCapabilities();
+
+	-- Snapshot now and again once login has settled, so a late login and an early
+	-- one can be compared directly.
+	if ((debugLevel or 0) >= 2 and not channelsLogged) then
+		channelsLogged = true;
+		logChatFrameChannels("focus pass");
+		if (_G.C_Timer and _G.C_Timer.After) then
+			_G.C_Timer.After(10, function() logChatFrameChannels("+10s"); end);
+		end
+	end
+
+	local channels = {_G.GetChannelList()};
+	for i = 1, #channels, 3 do
+		local name, disabled = channels[i+1], channels[i+2];
+		if (not disabled and type(name) == "string" and not focusedStreams[name]) then
+			local clubId, streamId = string.match(name, "^Community:(%d+):(%d+)$");
+			if (clubId and isStreamSubscribed(clubId, streamId)) then
+				-- Already subscribed, so sending works. Marked so later passes do
+				-- not reconsider it.
+				focusedStreams[name] = true;
+				dPrint("Left "..name.." to the client - already subscribed.");
+			elseif (clubId) then
+				-- pcall: FocusStream errors if the club or stream is not
+				-- subscribed yet, which is normal while the club list is still
+				-- syncing. Leaving the entry unmarked lets a later pass retry.
+				local ok = pcall(_G.C_Club.FocusStream,
+				                 tonumber(clubId) or clubId,
+				                 tonumber(streamId) or streamId);
+				if (ok) then
+					focusedStreams[name] = true;
+					if (clubStreamsLoaded[clubId]) then
+						dPrint("Focused community stream "..name.." (late - stream data already "
+						       .."loaded, so the default chat frame may not show it)");
+						lateFocusHappened = true;
+						-- Run the repair as soon as the channel list is readable rather
+						-- than on a fixed delay. The lists are still empty during the
+						-- focus pass, but every second spent waiting is a second of
+						-- community traffic missing from the default chat frame, which
+						-- matters on a busy community. A ticker polls until the list
+						-- populates; readdCommunityChannels is a no-op until then and
+						-- marks itself done once it runs.
+						startReaddPolling();
+					else
+						dPrint("Focused community stream "..name);
+					end
+				end
+			end
+		end
+	end
+end
+
+-- Recorded even when auto-focus is off, so a capture still shows the client's
+-- own subscription sequence for comparison.
+function Channel:CLUB_STREAMS_LOADED(clubId)
+	if (clubId == nil) then
+		return;
+	end
+	clubStreamsLoaded[tostring(clubId)] = true;
+end
+
+function Channel:CLUB_STREAM_SUBSCRIBED(clubId, streamId)
+	if (clubId ~= nil and streamId ~= nil) then
+		subscribedStreams[tostring(clubId)..":"..tostring(streamId)] = true;
+	end
+end
+
+function Channel:PLAYER_ENTERING_WORLD()
+	self:FocusCommunityStreams();
+end
+
+function Channel:CHANNEL_UI_UPDATE()
+	self:FocusCommunityStreams();
+end
+
+-- NOTE: this is Channel's ONLY OnWindowDestroyed. A second definition further
+-- down (added with community support) used to silently replace this one, so
+-- Windows[] entries were never cleared: a closed channel/community window's
+-- corpse stayed in the table, getChatWindow kept returning it, and the next
+-- message went into an invisible pooled frame instead of a fresh window.
 function Channel:OnWindowDestroyed(win)
-    if(win.type == "chat" and win.chatType == "channel") then
-        local chatName = win.theUser;
-        Windows[chatName].chatType = nil;
-        Windows[chatName].unreadCount = nil;
-        Windows[chatName].chatLoaded = nil;
-        Windows[chatName].channelNumber = nil;
-        Windows[chatName].channelSpecial = nil;
-        cleanChatList(Windows[chatName]);
-        Windows[chatName] = nil;
+    if(win.type == "chat" and (win.chatType == "channel" or win.chatType == "community")) then
+        win.chatType = nil;
+        win.unreadCount = nil;
+        win.chatLoaded = nil;
+        win.channelNumber = nil;
+        win.channelSpecial = nil;
+        win.clubId = nil;
+        win.streamId = nil;
+        cleanChatList(win);
+        -- Community windows are keyed by win.user (the clubId:streamId key)
+        -- while theUser holds the renamed display name, so remove by object
+        -- identity rather than trusting either field.
+        for key, obj in pairs(Windows) do
+            if (obj == win) then
+                Windows[key] = nil;
+            end
+        end
     end
 end
 
@@ -1404,6 +1888,24 @@ function Channel:CHAT_MSG_CHANNEL_LEAVE(...)
     updateJoinLeave("CHAT_MSG_CHANNEL_LEAVE", ...)
 end
 
+-- True when `name` refers to a Community (Club) stream rather than an ordinary
+-- numbered channel, in any of the forms the client uses for it.
+local function isCommunityChannelName(name)
+	if (type(name) ~= "string" or name == "") then
+		return false;
+	end
+	if (string.find(name, "^Community:") or string.find(name, "^%d+:%d+$")) then
+		return true;
+	end
+	if (_G.ChatFrameUtil and _G.ChatFrameUtil.GetCommunityAndStreamFromChannel) then
+		local ok, foundClubId = pcall(_G.ChatFrameUtil.GetCommunityAndStreamFromChannel, name);
+		if (ok and foundClubId) then
+			return true;
+		end
+	end
+	return false;
+end
+
 function Channel:CHAT_MSG_CHANNEL_NOTICE(...)
 	if HasAnySecretValues(...) then
 		self:DeferEvent("CHAT_MSG_CHANNEL_NOTICE", ...);
@@ -1421,8 +1923,49 @@ function Channel:CHAT_MSG_CHANNEL_NOTICE(...)
     end
     -- create new window if arg1 is YOU_JOINED
     if(arg1 == "YOU_JOINED") then
-        -- open window.
-        Channel:CHAT_MSG_CHANNEL("", "", nil, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11);
+        -- ...but NOT for community streams.
+        --
+        -- WARNING: this guard does NOT fix the "Couldn't send message" bug, and
+        -- an earlier version of this comment wrongly claimed it did. Keep that
+        -- straight, because the wrong story here has already cost one round of
+        -- investigation.
+        --
+        -- The theory was: community channels also announce themselves with
+        -- YOU_JOINED, and only at LOGIN (on /reload you are already joined and
+        -- no notice fires), so synthesizing a CHAT_MSG_CHANNEL here would claim
+        -- the stream as a plain "channel" window with no clubId/streamId, and
+        -- sending with /<number> would then take the channel route instead of
+        -- C_Club.SendMessage. It fit the login-only symptom exactly.
+        --
+        -- It is WRONG. Channel:CHAT_MSG_CHANNEL returns early unless the channel
+        -- is monitored under db.chat.world or db.chat.custom, and a community
+        -- lives in db.chat.community -- so the synthesized call bailed before
+        -- claiming anything. Confirmed empirically: with this guard in place the
+        -- send still failed. The guard is a NO-OP for that bug.
+        --
+        -- It is kept only because misclassifying a community stream as a
+        -- numbered channel would be wrong regardless. Community streams are
+        -- handled by CLUB_MESSAGE_ADDED and the "community" chat type, which
+        -- carry the club and stream IDs, so skipping them here loses nothing.
+        --
+        -- The send bug remains UNRESOLVED. Note that disabling community chat
+        -- can disable this whole module via Channel:SettingsChanged(), which
+        -- takes CHAT_MSG_CHANNEL_NOTICE with it -- so a test that "fixes" the
+        -- send by turning community off does not implicate community code.
+        -- See INVESTIGATION-community-send-failure.md before theorising further.
+        -- The exact shape of the channel name here is not documented and
+        -- differs between the internal name ("Community:<club>:<stream>"), the
+        -- settings key ("<club>:<stream>") and the display name
+        -- ("hotjh - epic people"), so test all three forms and finally ask
+        -- Blizzard directly. dPrint the values so a miss can be diagnosed from
+        -- a debug log rather than guessed at.
+        dPrint("YOU_JOINED: arg4='"..tostring(arg4).."' arg9='"..tostring(arg9).."'");
+        local isCommunityStream = isCommunityChannelName(arg4)
+                                  or isCommunityChannelName(arg9);
+        if (not isCommunityStream) then
+            -- open window.
+            Channel:CHAT_MSG_CHANNEL("", "", nil, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11);
+        end
     end
 end
 
@@ -1451,12 +1994,8 @@ function Channel:OnWindowShow(win)
     end
 end
 
-function Channel:OnWindowDestroyed(win)
-	win.clubId = nil;
-	win.streamId = nil;
-	win.channelNumber = nil;
-	win.channelSpecial = nil;
-end
+-- (Channel:OnWindowDestroyed lives next to the other window callbacks above;
+-- do not re-declare it here -- a second declaration replaces the first.)
 
 -- manage suppression
 function Channel.ChatMessageEventFilter (frame, event, ...)
@@ -1494,15 +2033,53 @@ end
 
 -- Community messages are handled a little bit different so we will have a separate filter for them.
 function Channel.ChatMessageCommunitiesEventFilter (frame, event, ...)
+	-- Announced before the enabled check so a debug capture can tell "the filter
+	-- never ran at all" apart from "the filter ran and bailed here". That
+	-- distinction is the whole finding of the 2026-08-11 capture.
 	if (not db or not db.chat.community.enabled) then
+		dPrint("CommunitiesFilter: entered, community chat disabled -> delivered");
 		return
 	end
 
 	local name = select(9, ...):gsub('Community:', '');
 
-	local neverSuppress = db.chat.community.channelSettings[name] and db.chat.community.channelSettings[name].neverSuppress;
+	local settings = db.chat.community.channelSettings[name];
+	local neverSuppress = settings and settings.neverSuppress;
 
-	if (not neverSuppress and getRuleSet().supress and db.chat.community.channelSettings[name] and db.chat.community.channelSettings[name].monitor) then
+	local suppress = (not neverSuppress and getRuleSet().supress
+	                  and settings and settings.monitor) and true or false;
+
+	-- Whether a community message reaches the default chat frame has been
+	-- reported as intermittent across logins. Two inputs can vary and this
+	-- announces both, because neither has ever been captured:
+	--
+	--   * arg9's real shape. The settings table is keyed "<clubId>:<streamId>"
+	--     (see getCommunityGroupList) and this filter derives its key by
+	--     stripping "Community:" from arg9. If arg9 is ever anything else --
+	--     a friendly name, say -- the lookup misses, `settings` is nil, and the
+	--     user's per-channel "never suppress" tick is read from a key that does
+	--     not exist. "settings=nil" below is that failure, and it is silent.
+	--   * getRuleSet().supress is per player state (resting/combat/pvp/arena),
+	--     so the same message can be suppressed in an inn and delivered in the
+	--     open world. That alone can look like a race.
+	--
+	-- A filter runs once per registered chat frame, which on a default UI means
+	-- ten identical lines for one message. At level 1 only an actual suppression
+	-- is announced, that being the interesting case; level 2 records every
+	-- frame's decision and names the frame, so it is visible which frames are
+	-- consuming the event at all.
+	if (suppress or (debugLevel or 0) >= 2) then
+		dPrint("CommunitiesFilter["..tostring(frame and frame.GetName and frame:GetName() or "?")
+		       .."]: arg9='"..tostring(select(9, ...)).."' key='"..tostring(name)
+		       .."' settings="..(settings and "found" or "nil")
+		       .." neverSuppress="..tostring(neverSuppress)
+		       .." monitor="..tostring(settings and settings.monitor)
+		       .." state="..tostring(curState)
+		       .." ruleSupress="..tostring(getRuleSet().supress)
+		       .." -> "..(suppress and "SUPPRESSED" or "delivered"));
+	end
+
+	if (suppress) then
 		return true
 	end
 
@@ -1517,10 +2094,28 @@ function Channel:CLUB_MESSAGE_ADDED(clubId, streamId, messageId)
 	end
 
 	local message = _G.C_Club.GetMessageInfo(clubId, streamId, messageId);
-	local from = _G.Ambiguate(message.author.name, "none");
-	local fromSelf = message.author.isSelf;
-	local fromBNetID = message.author.bnetAccountId;
-	local content = message.content;
+	local author = message and message.author or {};
+	local fromSelf = author.isSelf;
+
+	-- Ambiguate() errors on a nil argument, and a club message's author name is
+	-- not always present: the client withholds it the same way it withholds the
+	-- message body (see the protected-string handling in Modules/History.lua),
+	-- and message.author is then a table with no `name` at all. Without this
+	-- guard the whole handler dies, which is why no WIM window appeared for the
+	-- message even though the send itself had succeeded.
+	-- Tested with type() rather than truthiness: Ambiguate errors on ANY
+	-- non-string, and on a 12.x client a withheld name can arrive as a truthy
+	-- non-string (the same withholding that turns content into a |K..|k token).
+	local from;
+	if (type(author.name) == "string") then
+		from = _G.Ambiguate(author.name, "none");
+	elseif (fromSelf) then
+		from = _G.UnitName("player");
+	else
+		from = _G.UNKNOWN or "Unknown";
+	end
+	local fromBNetID = author.bnetAccountId;
+	local content = message and message.content;
 
 	local arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9, arg10, arg11 = content, from, fromSelf, name, nil, nil, nil, nil, name, nil, nil;
 
@@ -1532,6 +2127,25 @@ function Channel:CLUB_MESSAGE_ADDED(clubId, streamId, messageId)
 		win.streamId = streamId;
 
 		win:UpdateIcon();
+
+		-- UpdateIcon resolves theUser to "Community - Stream", but at window
+		-- creation the client often has no name to give yet, and nothing else
+		-- re-runs the resolution until the window is first opened (the skin
+		-- pass) -- so the shortcut list shows the raw clubId:streamId key.
+		-- Retry until it resolves or we give up.
+		if (win.theUser == name and _G.C_Timer and _G.C_Timer.NewTicker) then
+			local tries = 0;
+			_G.C_Timer.NewTicker(1, function(self)
+				tries = tries + 1;
+				local stillOurs = (Windows[name] == win and win.chatType == "community");
+				if (stillOurs and win.theUser == name) then
+					win:UpdateIcon();
+				end
+				if (not stillOurs or win.theUser ~= name or tries >= 15) then
+					self:Cancel();
+				end
+			end);
+		end
 	end
 
 	local r, g, b = ChatFrameUtil.GetCommunitiesChannelColor(clubId, streamId)
@@ -1782,7 +2396,21 @@ local function loadChatOptions()
 				local streamId = streamInfo.streamId;
 				local streamName = streamInfo.name;
 				local channelNumber = nil;
-				if (streamInfo.streamType == _G.Enum.ClubStreamType.Other) then
+				-- Include General as well as Other. Filtering to Other alone
+				-- excluded every community's MAIN channel -- General is the
+				-- default stream every community is created with, and many have
+				-- no other -- so the settings list came up empty and there was
+				-- no way to enable monitoring or history for them.
+				--
+				-- Guild and Officer streams stay excluded: WIM handles guild and
+				-- officer chat through its own modules, and listing them here
+				-- would give two competing sets of settings for one channel.
+				local streamType = streamInfo.streamType;
+				local clubStream = _G.Enum and _G.Enum.ClubStreamType;
+				local isGuildStream = clubStream
+				                      and (streamType == clubStream.Guild
+				                           or streamType == clubStream.Officer);
+				if (not isGuildStream) then
 					channelNumber = channelMap["Community:"..clubId..":"..streamId];
 					local active = "1";
 					table.insert(channelList, clubId..":"..streamId.."*"..active.."*"..(channelNumber or "0"));
@@ -1851,13 +2479,15 @@ local function loadChatOptions()
 						local clubId, streamId = ChatFrameUtil.GetCommunityAndStreamFromChannel(name);
 						local r, g, b = ChatFrameUtil.GetCommunitiesChannelColor(clubId, streamId)
 						color = { r = r, g = g, b = b };
-						f.sub.list.buttons[i].noHistory:Disable();
-						f.sub.list.buttons[i].noHistory:SetAlpha(.4);
-						f.sub.list.buttons[i].noHistory:SetChecked(true);
-					else
-						f.sub.list.buttons[i].noHistory:Enable();
-						f.sub.list.buttons[i].noHistory:SetAlpha(1);
 					end
+					-- "No History" used to be force-ticked and greyed out for
+					-- community channels, because upstream never recorded
+					-- Community chat -- the control would have been a lie. This
+					-- fork does record it (see the CLUB_MESSAGE_ADDED branch in
+					-- Modules/History.lua), so the setting is now live for
+					-- communities exactly as it is for World and Custom channels.
+					f.sub.list.buttons[i].noHistory:Enable();
+					f.sub.list.buttons[i].noHistory:SetAlpha(1);
 
                     f.sub.list.buttons[i].title:SetTextColor(color.r, color.g, color.b);
                     if(active) then
@@ -2029,8 +2659,9 @@ local function loadChatOptions()
             end
 
             button:SetScript("OnUpdate", function(self, elapsed)
+                    -- 12.1 removed the MouseIsOver global; the widget method replaces it.
                     for _, border in pairs(self.border) do
-                        if(_G.MouseIsOver(self)) then
+                        if(self:IsMouseOver()) then
                             border:Show();
                         else
                             border:Hide();
@@ -2197,7 +2828,7 @@ local function createUserList()
     end);
 
     win:SetScript("OnUpdate", function(self, elapsed)
-        if(_G.MouseIsOver(self) or (self.attachedTo and _G.MouseIsOver(self.attachedTo))) then
+        if(self:IsMouseOver() or (self.attachedTo and self.attachedTo:IsMouseOver())) then
             self.idleTime = 0;
         else
             self.idleTime = self.idleTime + elapsed;
