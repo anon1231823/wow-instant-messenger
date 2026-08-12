@@ -2152,6 +2152,7 @@ local function createUserList()
         button.text:SetText("  Button "..i);
         button.text:SetJustifyH("LEFT");
         button.text:SetAllPoints();
+		button.text._allowCustomFont = true;
         button.SetUser = function(self, user)
             self.user = user;
             self.text:SetText("  "..user);
@@ -2204,9 +2205,8 @@ local function createUserList()
 		self:ApplyBackdrop();
 
 		-- title font
-		local font = _G[skin.menu.title.font]:GetFont();
 		self.title.text:SetFont(
-			font,
+			skin.menu.title.font,
 			skin.menu.title.font_height,
 			skin.menu.title.font_flags
 		);
@@ -2222,12 +2222,7 @@ local function createUserList()
 		for i=1, #self.buttons do
 			local button = self.buttons[i];
 
-			font = _G[skin.menu.button.font]:GetFont();
-			button.text:SetFont(
-				font,
-				skin.menu.button.font_height,
-				skin.menu.button.font_flags
-			);
+			SetWidgetFont(button.text, skin.menu.button);
 		end
 	end
 

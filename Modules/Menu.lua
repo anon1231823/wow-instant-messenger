@@ -84,6 +84,7 @@ local function createButton(parent)
     button.text = _G[button:GetName().."Text"];
     button.text:ClearAllPoints();
     button.text:SetPoint("LEFT"); button.text:SetPoint("RIGHT");
+	button.text._allowCustomFont = true; -- flag that this frame allows custom fonts.
     button:GetHighlightTexture():ClearAllPoints();
     button:GetHighlightTexture():SetAllPoints();
 
@@ -93,12 +94,7 @@ local function createButton(parent)
     button.close:SetPoint("LEFT", button.status, "RIGHT", 2, 0);
 
 	button.ApplySkin = function(self, skin)
-		local font = _G[skin.menu.button.font]:GetFont();
-		self.text:SetFont(
-			font,
-			skin.menu.button.font_height,
-			skin.menu.button.font_flags
-		);
+		SetWidgetFont(self.text, skin.menu.button);
 	end
 
     button:SetScript("OnClick", function(self, b)
@@ -206,9 +202,8 @@ local function createGroup(title, list, maxButtons, showNone)
 		self:ApplyBackdrop();
 
 		-- title font
-		local font = _G[skin.menu.title.font]:GetFont();
 		self.title.text:SetFont(
-			font,
+			skin.menu.title.font,
 			skin.menu.title.font_height,
 			skin.menu.title.font_flags
 		);
