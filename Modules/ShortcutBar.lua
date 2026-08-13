@@ -542,7 +542,7 @@ RegisterShortcut("friend", L["Add Friend"], {
 		if(db.showToolTips) then
 			_G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
 			if(self.isFriend) then
-				_G.GameTooltip:SetText(L["Remove friend"]);
+				_G.GameTooltip:SetText(L["Remove Friend"]);
 			else
 				_G.GameTooltip:SetText(L["Add Friend"]);
 			end
@@ -578,7 +578,7 @@ RegisterShortcut("ignore", L["Ignore User"], {
 		if(db.showToolTips) then
 			_G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
 			if(self.ignored) then
-				_G.GameTooltip:SetText(L["Remove player"]);
+				_G.GameTooltip:SetText(L["Stop Ignoring"]);
 			else
 				_G.GameTooltip:SetText(L["Ignore User"]);
 			end
