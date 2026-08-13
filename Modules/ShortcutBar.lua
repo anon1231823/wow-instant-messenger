@@ -50,6 +50,26 @@ local function createButton(parent)
 			end
 			parent:UpdateButtons();
 		end
+	button.SetIgnored = function(self, value)
+			self.ignored = value and true or false;
+			if(self.ignored) then
+				self:SetAlpha(.45);
+				if(self.icon) then self.icon:SetDesaturated(true); end
+			else
+				self:SetAlpha(1);
+				if(self.icon) then self.icon:SetDesaturated(false); end
+			end
+		end
+	button.SetFriend = function(self, value)
+			self.isFriend = value and true or false;
+			if(self.isFriend) then
+				self:SetAlpha(.45);
+				if(self.icon) then self.icon:SetDesaturated(true); end
+			else
+				self:SetAlpha(1);
+				if(self.icon) then self.icon:SetDesaturated(false); end
+			end
+		end
 	button:SetScript("OnEnter", function(self)
 			local buttons = getButtonTable(parent.type);
 
@@ -298,6 +318,30 @@ local function isIgnored(name)
 	end
 end
 
+local function addIgnore(name)
+	if _G.C_FriendList and _G.C_FriendList.AddIgnore then
+		_G.C_FriendList.AddIgnore(name);
+	else
+		_G.AddIgnore(name);
+	end
+end
+
+local function removeIgnore(name)
+	if _G.C_FriendList and _G.C_FriendList.DelIgnore then
+		_G.C_FriendList.DelIgnore(name);
+	else
+		_G.DelIgnore(name);
+	end
+end
+
+local function removeFriend(name)
+	if _G.C_FriendList and _G.C_FriendList.RemoveFriend then
+		_G.C_FriendList.RemoveFriend(name);
+	else
+		_G.RemoveFriend(name);
+	end
+end
+
 function ShortcutBar:OnWindowShow(obj)
 	local buttons = getButtonTable(obj.type);
 
@@ -310,10 +354,12 @@ function ShortcutBar:OnWindowShow(obj)
 					obj.widgets.shortcuts.buttons[i]:Enable();
 				end
 			elseif buttons[i].id == "ignore" then
-				if obj.isBN or (obj.theUser and isIgnored(obj.theUser)) then
-					obj.widgets.shortcuts.buttons[i]:Disable();
+				local btn = obj.widgets.shortcuts.buttons[i];
+				if obj.isBN then
+					btn:Disable();
 				else
-					obj.widgets.shortcuts.buttons[i]:Enable();
+					btn:Enable();
+					btn:SetIgnored(obj.theUser and isIgnored(obj.theUser));
 				end
 			elseif buttons[i].id == "guild" then
 				if obj.isBN or not _G.IsInGuild() or not _G.CanGuildInvite() or (obj.theUser and lists.guild[obj.theUser]) then
@@ -343,10 +389,11 @@ function ShortcutBar:FRIENDLIST_UPDATE()
 		-- friend index is from the whisper button table; other window types (chat) have their own button sets.
 		local button = widget.type == "whisper" and widget.buttons[friend];
 		if(button and widget.parentWindow) then
-			if(lists.friends[widget.parentWindow.theUser] or _G.UnitName("player") == widget.parentWindow.theUser) then
+			if(_G.UnitName("player") == widget.parentWindow.theUser) then
 				button:Disable();
 			else
 				button:Enable();
+				button:SetFriend(lists.friends[widget.parentWindow.theUser] or false);
 			end
 		end
 	end
@@ -367,10 +414,11 @@ function ShortcutBar:IGNORELIST_UPDATE()
 	for widget in Widgets("shortcuts") do
 		local button = widget.type == "whisper" and widget.buttons[ignore];
 		if(button and widget.parentWindow) then
-			if(widget.parentWindow.isBN or isIgnored(widget.parentWindow.theUser)) then
+			if(widget.parentWindow.isBN) then
 				button:Disable();
 			else
 				button:Enable();
+				button:SetIgnored(isIgnored(widget.parentWindow.theUser));
 			end
 		end
 	end
@@ -484,7 +532,21 @@ RegisterShortcut("guild", L["Invite to Guild"], {
 RegisterShortcut("friend", L["Add Friend"], {
 	greyOut = true,
 	OnClick = function(self)
-		_G.C_FriendList.AddFriend(self.parentWindow.theUser);
+		if(self.isFriend) then
+			removeFriend(self.parentWindow.theUser);
+		else
+			_G.C_FriendList.AddFriend(self.parentWindow.theUser);
+		end
+	end,
+	OnEnter = function(self)
+		if(db.showToolTips) then
+			_G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+			if(self.isFriend) then
+				_G.GameTooltip:SetText(L["Remove friend"]);
+			else
+				_G.GameTooltip:SetText(L["Add Friend"]);
+			end
+		end
 	end,
 	SetDefaults = function(self)
 		ShortcutBar:FRIENDLIST_UPDATE();
@@ -494,18 +556,32 @@ RegisterShortcut("ignore", L["Ignore User"], {
 	greyOut = true,
 	OnClick = function(self)
 		local win = self.parentWindow;
-		_G.StaticPopupDialogs["WIM_IGNORE"] = {
-		preferredIndex = STATICPOPUP_NUMDIALOGS,
-		text = _G.format(L["Are you sure you want to\nignore %s?"], (win.isBN and win.toonName or win.theUser)),
-		button1 = L["Yes"],
-		button2 = L["No"],
-		OnAccept = function()
-			_G.C_FriendList.AddIgnore(win.isBN and win.toonName or win.theUser);
-		end,
-		timeout = 0,
-		whileDead = 1,
-		hideOnEscape = 1
-		};
-		_G.StaticPopup_Show("WIM_IGNORE");
+		if(self.ignored) then
+			removeIgnore(win.theUser);
+		else
+			_G.StaticPopupDialogs["WIM_IGNORE"] = {
+			preferredIndex = STATICPOPUP_NUMDIALOGS,
+			text = _G.format(L["Are you sure you want to\nignore %s?"], (win.isBN and win.toonName or win.theUser)),
+			button1 = L["Yes"],
+			button2 = L["No"],
+			OnAccept = function()
+				addIgnore(win.isBN and win.toonName or win.theUser);
+			end,
+			timeout = 0,
+			whileDead = 1,
+			hideOnEscape = 1
+			};
+			_G.StaticPopup_Show("WIM_IGNORE");
 		end
-	});
+	end,
+	OnEnter = function(self)
+		if(db.showToolTips) then
+			_G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+			if(self.ignored) then
+				_G.GameTooltip:SetText(L["Remove player"]);
+			else
+				_G.GameTooltip:SetText(L["Ignore User"]);
+			end
+		end
+	end
+});
