@@ -59,7 +59,7 @@ db_defaults.keepFocusRested = true;
 db_defaults.autoFocus = false;
 db_defaults.winSize = {
 		width = 333,
-		height = 220,
+		height = 245,
 		scale = 100,
                 strata = "DIALOG"
 	};
