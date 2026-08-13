@@ -289,6 +289,12 @@ function ShortcutBar:OnWindowShow(obj)
 				else
 					obj.widgets.shortcuts.buttons[i]:Enable();
 				end
+			elseif buttons[i].id == "guild" then
+				if obj.isBN or not _G.IsInGuild() or (obj.theUser and lists.guild[obj.theUser]) then
+					obj.widgets.shortcuts.buttons[i]:Disable();
+				else
+					obj.widgets.shortcuts.buttons[i]:Enable();
+				end
 			end
 		end
 		obj.widgets.shortcuts:UpdateButtons();
@@ -418,6 +424,12 @@ RegisterShortcut("invite", L["Invite to Party"], {
 			end
 		end
 	});
+RegisterShortcut("guild", L["Invite to Guild"], {
+	OnClick = function(self)
+		local win = self.parentWindow;
+		_G.GuildInvite(win.theUser);
+	end
+});
 RegisterShortcut("friend", L["Add Friend"], {
 		OnClick = function(self)
 			_G.C_FriendList.AddFriend(self.parentWindow.theUser);

@@ -150,6 +150,7 @@ WIM.AddLocale("koKR", {
     ["Unknown"] = "알 수 없음",
     ["Click to update..."] = "클릭 - 위치 정보 갱신",
     ["Invite to Party"] = "파티 초대",
+    ["Invite to Guild"] = "길드 초대",
     ["Add Friend"] = "친구 추가",
     ["Ignore User"] = "차단 설정",
     ["Are you sure you want to\nignore %s?"] = "%s을(를) 차단하시겠습니까?",

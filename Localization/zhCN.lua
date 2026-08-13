@@ -152,6 +152,7 @@ WIM.AddLocale("zhCN", {
     ["Unknown"] = "未知",
     ["Click to update..."] = "点击更新……",
     ["Invite to Party"] = "邀请",
+    ["Invite to Guild"] = "公会邀请",
     ["Add Friend"] = "添加好友",
     ["Ignore User"] = "屏蔽",
     ["Are you sure you want to\nignore %s?"] = "确定要屏蔽 %s 吗？",

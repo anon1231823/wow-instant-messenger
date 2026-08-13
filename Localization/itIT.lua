@@ -149,6 +149,7 @@ WIM.AddLocale("itIT", {
     ["Unknown"] = "Sconosciuto",
     ["Click to update..."] = "Clicca per aggiornare...",
     ["Invite to Party"] = "Invita nel gruppo",
+    ["Invite to Guild"] = "Invita nella gilda",
     ["Add Friend"] = "Aggiungi amico",
     ["Ignore User"] = "Ignora utente",
     ["Are you sure you want to\nignore %s?"] = "Vuoi davvero\nignorare %s?",

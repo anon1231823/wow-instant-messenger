@@ -255,7 +255,8 @@ local WIM_ClassicSkin = {
                     icons = {
                         location = "Interface\\Icons\\Ability_TownWatch",
                         invite = "Interface\\Icons\\Spell_Holy_BlessingOfStrength",
-                        friend = "interface\\icons\\spell_chargepositive",
+                        guild = "Interface\\Icons\\INV_Shirt_GuildTabard_01",
+                        friend = "Interface\\icons\\spell_chargepositive",
                         ignore = "Interface\\Icons\\Ability_Physical_Taunt",
                     }
                 }

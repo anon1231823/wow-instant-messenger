@@ -152,6 +152,7 @@ local translations = {
     ["Unknown"] = "Desconocido",
     ["Click to update..."] = "Haz clic para actualizar...",
     ["Invite to Party"] = "Invitar al grupo",
+    ["Invite to Guild"] = "Invitar a la hermandad",
     ["Add Friend"] = "Añadir amigo",
     ["Ignore User"] = "Ignorar jugador",
     ["Are you sure you want to\nignore %s?"] = "¿Estás seguro de que quieres\nignorar a %s?",

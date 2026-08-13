@@ -152,6 +152,7 @@ WIM.AddLocale("enUS", {
     ["Unknown"] = true,
     ["Click to update..."] = true,
     ["Invite to Party"] = true,
+    ["Invite to Guild"] = true,
     ["Add Friend"] = true,
     ["Ignore User"] = true,
     ["Are you sure you want to\nignore %s?"] = true,

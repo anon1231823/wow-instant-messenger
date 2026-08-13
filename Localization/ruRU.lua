@@ -153,6 +153,7 @@ WIM.AddLocale("ruRU", {
 	["Unknown"] = "Неизвестно",
 	["Click to update..."] = "Кликните для обновления...",
 	["Invite to Party"] = "Пригласить в группу",
+	["Invite to Guild"] = "Пригласить в гильдию",
 	["Add Friend"] = "Добавить в друзья",
 	["Ignore User"] = "Игнорировать персонажа",
 	["Are you sure you want to\nignore %s?"] = "Вы уверены что вы хотите добавить\nперсонажа %s в черный список?",

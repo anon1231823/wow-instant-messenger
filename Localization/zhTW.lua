@@ -155,6 +155,7 @@ WIM.AddLocale("zhTW", {
     ["Unknown"] = "未知",
     ["Click to update..."] = "點擊更新資訊……",
     ["Invite to Party"] = "組隊邀請",
+    ["Invite to Guild"] = "公會邀請",
     ["Add Friend"] = "加入好友",
     ["Ignore User"] = "加入黑名單",
     ["Are you sure you want to\nignore %s?"] = "您確定您要忽略 %s",
