@@ -289,6 +289,15 @@ local function canInviteBN(id)
 	return show
 end
 
+local function isIgnored(name)
+	if(not name) then return end
+	if _G.C_FriendList and _G.C_FriendList.IsIgnored then
+		return _G.C_FriendList.IsIgnored(name);
+	else
+		return _G.IsIgnored(name);
+	end
+end
+
 function ShortcutBar:OnWindowShow(obj)
 	local buttons = getButtonTable(obj.type);
 
@@ -301,7 +310,7 @@ function ShortcutBar:OnWindowShow(obj)
 					obj.widgets.shortcuts.buttons[i]:Enable();
 				end
 			elseif buttons[i].id == "ignore" then
-				if obj.isBN then
+				if obj.isBN or (obj.theUser and isIgnored(obj.theUser)) then
 					obj.widgets.shortcuts.buttons[i]:Disable();
 				else
 					obj.widgets.shortcuts.buttons[i]:Enable();
@@ -335,6 +344,30 @@ function ShortcutBar:FRIENDLIST_UPDATE()
 		local button = widget.type == "whisper" and widget.buttons[friend];
 		if(button and widget.parentWindow) then
 			if(lists.friends[widget.parentWindow.theUser] or _G.UnitName("player") == widget.parentWindow.theUser) then
+				button:Disable();
+			else
+				button:Enable();
+			end
+		end
+	end
+end
+
+function ShortcutBar:IGNORELIST_UPDATE()
+	local buttons = getButtonTable("whisper");
+
+	local ignore = nil;
+	for i=1, #buttons do
+		if(buttons[i].id == "ignore") then
+			ignore = i;
+		end
+	end
+	if(not ignore) then
+		return;
+	end
+	for widget in Widgets("shortcuts") do
+		local button = widget.type == "whisper" and widget.buttons[ignore];
+		if(button and widget.parentWindow) then
+			if(widget.parentWindow.isBN or isIgnored(widget.parentWindow.theUser)) then
 				button:Disable();
 			else
 				button:Enable();
@@ -458,7 +491,8 @@ RegisterShortcut("friend", L["Add Friend"], {
 	end
 });
 RegisterShortcut("ignore", L["Ignore User"], {
-		OnClick = function(self)
+	greyOut = true,
+	OnClick = function(self)
 		local win = self.parentWindow;
 		_G.StaticPopupDialogs["WIM_IGNORE"] = {
 		preferredIndex = STATICPOPUP_NUMDIALOGS,
