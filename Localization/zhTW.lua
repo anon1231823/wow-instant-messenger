@@ -158,7 +158,7 @@ WIM.AddLocale("zhTW", {
     ["Invite to Guild"] = "公會邀請",
     ["Add Friend"] = "添加好友",
     ["Remove Friend"] = "刪除好友",
-    ["Ignore User"] = "忽略玩家",
+    ["Ignore Player"] = "忽略玩家",
     ["Stop Ignoring"] = "停止忽略",
     ["Are you sure you want to\nignore %s?"] = "您確定您要忽略 %s",
     ["Right-Click for profile links..."] ="右鍵點擊 查看英雄榜",

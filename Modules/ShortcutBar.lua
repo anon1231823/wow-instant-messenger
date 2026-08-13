@@ -552,7 +552,7 @@ RegisterShortcut("friend", L["Add Friend"], {
 		ShortcutBar:FRIENDLIST_UPDATE();
 	end
 });
-RegisterShortcut("ignore", L["Ignore User"], {
+RegisterShortcut("ignore", L["Ignore Player"], {
 	greyOut = true,
 	OnClick = function(self)
 		local win = self.parentWindow;
@@ -580,7 +580,7 @@ RegisterShortcut("ignore", L["Ignore User"], {
 			if(self.ignored) then
 				_G.GameTooltip:SetText(L["Stop Ignoring"]);
 			else
-				_G.GameTooltip:SetText(L["Ignore User"]);
+				_G.GameTooltip:SetText(L["Ignore Player"]);
 			end
 		end
 	end

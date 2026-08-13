@@ -155,7 +155,7 @@ WIM.AddLocale("zhCN", {
     ["Invite to Guild"] = "公会邀请",
     ["Add Friend"] = "添加好友",
     ["Remove Friend"] = "删除好友",
-    ["Ignore User"] = "屏蔽玩家",
+    ["Ignore Player"] = "屏蔽玩家",
     ["Stop Ignoring"] = "不再屏蔽",
     ["Are you sure you want to\nignore %s?"] = "确定要屏蔽 %s 吗？",
     ["Right-Click for profile links..."] = "右键查看英雄榜链接……",

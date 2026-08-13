@@ -155,7 +155,7 @@ WIM.AddLocale("enUS", {
     ["Invite to Guild"] = true,
     ["Add Friend"] = true,
     ["Remove Friend"] = true,
-    ["Ignore User"] = true,
+    ["Ignore Player"] = true,
     ["Stop Ignoring"] = true,
     ["Are you sure you want to\nignore %s?"] = true,
     ["Right-Click for profile links..."] = true,

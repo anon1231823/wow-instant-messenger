@@ -156,7 +156,7 @@ WIM.AddLocale("ruRU", {
 	["Invite to Guild"] = "Пригласить в гильдию",
 	["Add Friend"] = "Добавить",
 	["Remove Friend"] = "Исключить",
-	["Ignore User"] = "Игнорировать персонажа",
+	["Ignore Player"] = "Игнорировать персонажа",
 	["Stop Ignoring"] = "Больше не игнорировать",
 	["Are you sure you want to\nignore %s?"] = "Вы уверены что вы хотите добавить\nперсонажа %s в черный список?",
     ["Right-Click for profile links..."] = "[Правый-Клик] - ссылка на профиль...",

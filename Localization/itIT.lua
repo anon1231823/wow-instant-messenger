@@ -152,7 +152,7 @@ WIM.AddLocale("itIT", {
     ["Invite to Guild"] = "Invita nella gilda",
     ["Add Friend"] = "Aggiungi amico",
     ["Remove Friend"] = "Rimuovi amico",
-    ["Ignore User"] = "Ignora utente",
+    ["Ignore Player"] = "Ignora utente",
     ["Stop Ignoring"] = "Non ignorare più",
     ["Are you sure you want to\nignore %s?"] = "Vuoi davvero\nignorare %s?",
     ["Right-Click for profile links..."] = "Tasto destro per i collegamenti al profilo...",

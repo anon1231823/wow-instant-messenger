@@ -153,7 +153,7 @@ WIM.AddLocale("koKR", {
     ["Invite to Guild"] = "길드 초대",
     ["Add Friend"] = "친구 추가",
     ["Remove Friend"] = "친구 삭제",
-    ["Ignore User"] = "플레이어 차단",
+    ["Ignore Player"] = "플레이어 차단",
     ["Stop Ignoring"] = "차단 해제",
     ["Are you sure you want to\nignore %s?"] = "%s을(를) 차단하시겠습니까?",
     ["Right-Click for profile links..."] = "우클릭하여 프로필 링크 보기...",
