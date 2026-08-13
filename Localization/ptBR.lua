@@ -148,7 +148,7 @@ WIM.AddLocale("ptBR", {
     ["Player Location"] = "Zona do jogador",
     ["Unknown"] = "Desconhecido",
     ["Click to update..."] = "Clique para atualizar...",
-    ["Invite to Party"] = "Convidar",
+    ["Invite to Party"] = "Convidar para o grupo",
     ["Invite to Guild"] = "Convidar para a guilda",
     ["Add Friend"] = "Adicionar amigo",
     ["Ignore User"] = "Ignorar Jogador",
