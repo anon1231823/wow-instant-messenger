@@ -69,6 +69,13 @@ local function General_Main()
 --    frame.welcome.reset:ClearAllPoints();
 --    frame.welcome.reset:SetPoint("LEFT", frame.welcome.cb3, "RIGHT", frame.welcome.cb2.text:GetStringWidth()+30, 0);
 --    frame.welcome.lastObj = frame.welcome.cb3;
+
+    -- The 3.16.14 "History Safety" guardrail section used to follow here. The
+    -- blob archive (one serialized string per conversation) made the
+    -- constants ceiling unreachable, so the section -- which also overlapped
+    -- the Welcome section's widgets -- was removed with the guardrail itself
+    -- (2026-08-13). See the matching note in Modules/History.lua.
+
     return frame;
 end
 
@@ -742,6 +749,9 @@ local function General_History(isChat)
         f.sub:CreateCheckButton(_G.INSTANCE_CHAT, historyDB, "battleground");
         f.sub:CreateCheckButton(L["World Chat"], historyDB, "world");
         f.sub:CreateCheckButton(L["Custom Chat"], historyDB, "custom");
+        -- No Community Chat option here: Community chat cannot be recorded --
+        -- the client only ever hands addons a protected-string token, never
+        -- the text (see the CLUB_MESSAGE_ADDED branch in Modules/History.lua).
     end
     --[[f.sub.chat = f.sub:CreateCheckButton(L["Record Chat"], db.history.chat, "enabled");
     f.sub.chat:ClearAllPoints();
@@ -876,7 +886,7 @@ local function General_Sounds(isChat)
         f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(_G.SAY), db.sounds.chat, "say", nil, nil, soundList[7], db.sounds.chat, "say_sml");
         f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(L["World Chat"]), db.sounds.chat, "world", nil, nil, soundList[8], db.sounds.chat, "world_sml");
         f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(L["Custom Chat"]), db.sounds.chat, "custom", nil, nil, soundList[9], db.sounds.chat, "custom_sml");
-		f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(L["Community Chat"]), db.sounds.chat, "community", nil, nil, soundList[9], db.sounds.chat, "community_sml");
+        f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(L["Community Chat"]), db.sounds.chat, "community", nil, nil, soundList[9], db.sounds.chat, "community_sml");
         f.sub.nextOffSetY = -310;
         f.sub:CreateCheckButtonMenu(L["Play sound when a message is sent."], db.sounds.chat, "msgout", nil, nil, soundList[10], db.sounds.chat, "msgout_sml");
     else

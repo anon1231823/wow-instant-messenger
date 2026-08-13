@@ -9,10 +9,9 @@ local date = date;
 local time = time;
 local select = select;
 local tonumber = tonumber;
--- 3.16.13: extra builtins needed by the history size guardrail. These have to
--- be captured as locals BEFORE the setfenv(1, WIM) below, otherwise they
--- resolve through the WIM table (which doesn't contain them) and come back
--- nil at runtime.
+-- Extra builtins used throughout this file. These have to be captured as
+-- locals BEFORE the setfenv(1, WIM) below, otherwise they resolve through the
+-- WIM table (which doesn't contain them) and come back nil at runtime.
 local type = type;
 local next = next;
 local pcall = pcall;
@@ -41,27 +40,12 @@ db_defaults.history = {
         all = true
     },
     chat = {
-        -- 3.18.0: record Community (Club) chat. Defaults OFF, matching every
-        -- other chat type here -- guild, officer, party, raid, say, world and
-        -- custom are all absent from these defaults and so start nil/false.
-        -- Enabled from Options > Chat > History; per-community opt-out lives in
-        -- db.chat.community.channelSettings[key].noHistory.
-        community = false,
         preview = true,
         previewCount = 25,
         maxPer = true,
         maxCount = 500,
         ageLimit = true,
         maxAge = 60*60*24*7*2,
-    },
-    -- 3.16.13/3.16.14: Guardrail. When enabled, WIM stops appending new records
-    -- once the estimated unique-constant count of the per-character
-    -- SavedVariables chunk approaches a configurable ceiling. The hard limit is
-    -- Lua 5.1's MAXARG_Bx = 2^18 - 1 = 262,143 unique constants per chunk.
-    -- Default 240 (×1000 = 240,000) leaves headroom below the hard cap.
-    guardrail = {
-        enabled = true,
-        maxConstants = 240,
     },
 };
 db_defaults.displayColors.historyIn = {
@@ -79,6 +63,56 @@ local dDay = 60*60*24;
 local dWeek = dDay*7;
 local dMonth = dWeek*4;
 local dYear = dMonth*12;
+
+-- ---------------------------------------------------------------------------
+-- History Viewer filter modes.
+--
+-- The Filters section supports two modes, kept in win.FILTERMODE:
+--   { kind = "days" }                       -- classic: every day, "Show All"
+--   { kind = "relative", days = N, label }  -- rolling window of whole days
+--
+-- A relative window is MIDNIGHT-ALIGNED: "Last N Days" means today plus the
+-- N-1 whole days before it. That keeps the record window and the day-bucket
+-- rows below the header in perfect agreement -- a bucket is either entirely
+-- inside the window or entirely outside it, never straddling the cutoff.
+-- `label` stores the raw localization key; render it through L[] at display
+-- time.
+-- ---------------------------------------------------------------------------
+local RELATIVE_PRESETS = {
+    { days = 1,   label = "Last 1 Day"   },
+    { days = 7,   label = "Last 7 Days"  },
+    { days = 30,  label = "Last 30 Days" },
+    { days = 90,  label = "Last 90 Days" },
+};
+
+local function relativeWindowStart(days)
+    local tbl = date("*t", time());
+    local todayStart = time{year = tbl.year, month = tbl.month, day = tbl.day, hour = 0};
+    return todayStart - (days - 1) * dDay;
+end
+
+-- The selector filter's window start, or nil when the toggle is off or no
+-- relative mode is active. `win` is the History Viewer frame.
+local function selectorCutoff(win)
+    if (win.FILTERSELECTOR and win.FILTERMODE
+        and win.FILTERMODE.kind == "relative") then
+        return relativeWindowStart(win.FILTERMODE.days);
+    end
+    return nil;
+end
+
+-- O(1) activity test: records append in time order, so the LAST record of a
+-- conversation is its newest.
+local function convoHasActivitySince(convoTbl, cutoff)
+    local last = type(convoTbl) == "table" and convoTbl[#convoTbl];
+    return type(last) == "table" and type(last.time) == "number"
+           and last.time >= cutoff;
+end
+
+-- Sentinel appended to the user list when the selector filter hid entries;
+-- rendered as the greyed "-- Results Filtered --" row. The control character
+-- keeps it from ever colliding with a real conversation name.
+local FILTERED_USER_MARKER = "\1FILTERED";
 
 local tmpTable = {};
 
@@ -104,155 +138,22 @@ end
 
 
 -- ----------------------------------------------------------------------------
--- 3.16.14: History constant-count guardrail.
---
--- Lua 5.1's bytecode format limits each chunk to MAXARG_Bx = 2^18 - 1 =
--- 262,143 unique constants. WoW loads each SavedVariables file as a single
--- chunk. When the per-character history file's unique string + number literals
--- exceed this ceiling the client emits "constant table overflow" and resets
--- the file. This guardrail tracks the exact metric -- unique constants -- and
--- refuses new appends before the limit is hit.
---
--- A persistent in-memory set (`constantSet`) holds every unique string and
--- number value observed in the current character's history. Its size IS the
--- constant count. On insert, new values are checked against the set in O(1).
--- On bulk deletes a full recompute reconciles the set (we cannot efficiently
--- decrement because we don't track reference counts).
-
-local constantSet = {};
-local estimatedConstantCount = 0;
-
-local guardrailWarnedThisSession = false;
-
-local function addConstant(value)
-    local t = type(value);
-    if (t ~= "string" and t ~= "number") then
-        return;
-    end
-    if (not constantSet[value]) then
-        constantSet[value] = true;
-        estimatedConstantCount = estimatedConstantCount + 1;
-    end
-end
-
-local function addRecordConstants(record, index)
-    if (type(record) ~= "table") then return; end
-    addConstant(index);
-    for k, v in pairs(record) do
-        addConstant(k);
-        if (type(v) == "string" or type(v) == "number") then
-            addConstant(v);
-        elseif (type(v) == "table") then
-            for k2, v2 in pairs(v) do
-                addConstant(k2);
-                if (type(v2) == "string" or type(v2) == "number") then
-                    addConstant(v2);
-                end
-            end
-        end
-    end
-end
-
-local function recomputeConstantCount()
-    table.wipe(constantSet);
-    estimatedConstantCount = 0;
-    if (type(history) ~= "table"
-        or not history[env.realm]
-        or not history[env.realm][env.character])
-    then
-        return 0;
-    end
-    local charHistory = history[env.realm][env.character];
-    for convoKey, convoTable in pairs(charHistory) do
-        addConstant(convoKey);
-        if (type(convoTable) == "table") then
-            for key, value in pairs(convoTable) do
-                addConstant(key);
-                if (type(value) == "string" or type(value) == "number") then
-                    addConstant(value);
-                elseif (type(value) == "table") then
-                    for k2, v2 in pairs(value) do
-                        addConstant(k2);
-                        if (type(v2) == "string" or type(v2) == "number") then
-                            addConstant(v2);
-                        elseif (type(v2) == "table") then
-                            for k3, v3 in pairs(v2) do
-                                addConstant(k3);
-                                if (type(v3) == "string" or type(v3) == "number") then
-                                    addConstant(v3);
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return estimatedConstantCount;
-end
-
-function RecomputeHistoryConstants()
-    return recomputeConstantCount();
-end
-
-function GetEstimatedConstantCount()
-    if (estimatedConstantCount == 0
-        and history
-        and history[env.realm]
-        and history[env.realm][env.character]
-        and next(history[env.realm][env.character]) ~= nil)
-    then
-        recomputeConstantCount();
-    end
-    return estimatedConstantCount;
-end
-
-local function isHistoryWriteBlocked()
-    local g = db and db.history and db.history.guardrail;
-    if (not g or not g.enabled) then
-        return false;
-    end
-    local maxConstants = (g.maxConstants or 240) * 1000;
-    return estimatedConstantCount >= maxConstants;
-end
-
-local function warnHistoryFull()
-    if (guardrailWarnedThisSession) then
-        return;
-    end
-    guardrailWarnedThisSession = true;
-    local g = db and db.history and db.history.guardrail;
-    local cap = (g and g.maxConstants or 240) * 1000;
-    _G.DEFAULT_CHAT_FRAME:AddMessage(string.format(
-        "|cffff4040[WIM]|r Saved history has reached the configured guardrail "
-        .."limit of %d,000 unique constants (Lua limit: 262,143). To protect "
-        .."the integrity of your saved data, further messages will NOT be "
-        .."recorded until you free up space (use the History Viewer to delete "
-        .."old conversations) or raise the limit in the WIM options under "
-        .."General -> Main -> History Safety. You can also disable the "
-        .."guardrail entirely from there.",
-        cap / 1000
-    ));
-    if (_G.PlaySound) then
-        pcall(_G.PlaySound, 8959, "Master");
-    end
-end
-
-function ResetHistoryGuardrailWarning()
-    guardrailWarnedThisSession = false;
-end
+-- The 3.16.14 constant-count guardrail used to live here. It guarded the
+-- NATIVE-TABLE history format against Lua 5.1's 262,143-constants-per-chunk
+-- bytecode limit ("constant table overflow" resets the file -- issue #251).
+-- The blob archive made it obsolete: history persists as one serialized
+-- string per conversation (WIM_HistoryArchive, see WIM.lua), so the saved
+-- file's constant count grows with the number of CONVERSATIONS, not
+-- messages, and cannot approach the limit in practice. Worse, the meter kept
+-- counting the live tree as if it were still written natively, so it warned
+-- about a file that no longer exists. Removed 2026-08-13.
+-- ----------------------------------------------------------------------------
 
 local function pruneHistory(historyTable, maxCount)
-    local pruned = 0;
     while (maxCount < #historyTable) do
         table.remove(historyTable, 1);
-        pruned = pruned + 1;
-    end
-    if (pruned > 50) then
-        recomputeConstantCount();
     end
 end
--- ----------------------------------------------------------------------------
 
 
 -- ----------------------------------------------------------------------------
@@ -281,19 +182,6 @@ end
 -- the literal sequence "@BN@".
 BN_PSEUDO_REALM = "@BN@";
 
--- 3.18.0: Community (Club) chats are recorded per-character like any other
--- channel, but they belong to the ACCOUNT rather than to a character -- the same
--- community is the same conversation whoever you were logged in as. The History
--- Viewer therefore consolidates them under a pseudo-realm, exactly as it does
--- for Battle.net friends.
---
--- Conversations are keyed by "clubId:streamId" (what upstream's ChatEngine uses
--- as the window/user name). That key is stable but unreadable, so the display
--- name is captured into the conversation's info table at record time and
--- refreshed on every message: a club can be renamed or left, and the raw key is
--- all we would otherwise have left to show.
-COMMUNITY_PSEUDO_REALM = "@COMMUNITY@";
-
 -- Returns true if `convoKey` looks like a Battle.net handle (a BattleTag like
 -- "Friend#1234" or a legacy RealID like "user@example.com"). BattleTags and
 -- email addresses contain characters that cannot appear in a player name or
@@ -312,39 +200,6 @@ end
 -- Walks the entire history tree and returns a {BattleTag = true} set of every
 -- BN handle that appears in any conversation, on any realm, on any character.
 -- Used by the dropdown builder to enumerate the BN section.
--- Returns { [convoKey] = displayName } for every Community chat recorded
--- anywhere on the account. Like the Battle.net list this is an account-wide
--- consolidation, so everything has to be resident first.
-function GetAllCommunityConvos()
-    local found = {};
-    if (type(history) ~= "table") then
-        return found;
-    end
-    EnsureAllHistoryLoaded();
-    for realm, characters in pairs(history) do
-        if (realm ~= BN_PSEUDO_REALM and realm ~= COMMUNITY_PSEUDO_REALM
-            and type(characters) == "table")
-        then
-            for _, convos in pairs(characters) do
-                if (type(convos) == "table") then
-                    for convoKey, convo in pairs(convos) do
-                        if (type(convo) == "table" and type(convo.info) == "table"
-                            and convo.info.community)
-                        then
-                            -- Prefer whichever copy carries a display name; a
-                            -- character that only ever saw the club before it
-                            -- was renamed may have none.
-                            found[convoKey] = convo.info.displayName
-                                              or found[convoKey] or convoKey;
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return found;
-end
-
 function GetAllBNConvoKeys()
     local seen = {};
     if (type(history) ~= "table") then
@@ -375,16 +230,12 @@ end
 -- matches `bnKey`. The callback receives the conversation table and the
 -- (realm, character) pair it lives under, so callers can produce records
 -- annotated with origin context if needed.
--- Walks every (realm, character) slot and invokes `callback` for each copy of
--- the conversation keyed by `bnKey`. Despite the name this is generic: it backs
--- both the Battle.net friend consolidation and, since 3.18.0, the Community
--- chat consolidation, which aggregate the same way.
 local function forEachBNConvo(bnKey, callback)
     if (type(history) ~= "table") then
         return;
     end
     for realm, characters in pairs(history) do
-        if (realm ~= BN_PSEUDO_REALM and realm ~= COMMUNITY_PSEUDO_REALM
+        if (realm ~= BN_PSEUDO_REALM
             and type(characters) == "table") then
             for character, convos in pairs(characters) do
                 if (type(convos) == "table") then
@@ -506,15 +357,6 @@ local function recordWhisper(inbound, ...)
 			from = btag or toonName or from
 		end
 
-        -- 3.16.14: constant-count guardrail. If the per-character history has
-        -- reached the configured constant ceiling, drop the record on the floor
-        -- and warn the user once. The whisper is still displayed in the active
-        -- window and the chat frame normally; we are only refusing to PERSIST it.
-        if (isHistoryWriteBlocked()) then
-            warnHistoryFull();
-            return;
-        end
-
         local history = getPlayerHistoryTable(from);
         history.info.gm = lists.gm[from];
         local record = cacheIfCensored({
@@ -526,8 +368,6 @@ local function recordWhisper(inbound, ...)
             time = select(29, ...) or _G.time();
         }, ...);
         table.insert(history, record);
-        addConstant(from);
-        addRecordConstants(record, #history);
         -- Blob archive: this conversation now differs from its archived copy.
         MarkHistoryDirty(env.realm, env.character, from);
         if(WIM.db.history.maxPer) then
@@ -590,9 +430,6 @@ local function deleteOldHistory(isChat)
     end
     if(count > 0) then
         _G.DEFAULT_CHAT_FRAME:AddMessage(_G.format(L["WIM pruned %d |4message:messages; from your history."], count));
-        -- 3.16.14: Recompute after bulk prune so the constant set is accurate.
-        recomputeConstantCount();
-        guardrailWarnedThisSession = false;
     end
 end
 
@@ -601,8 +438,6 @@ function History:OnEnableWIM()
     if(db.history.ageLimit) then
         deleteOldHistory();
     end
-    -- 3.16.14: initial constant-count computation now that history is loaded.
-    recomputeConstantCount();
 end
 
 function History:OnEnable()
@@ -710,30 +545,16 @@ function ChatHistory:OnDisable()
 end
 
 
--- `infoFields`, when given, is merged into the conversation's info table. It is
--- how community chats record their club/stream identity and display name
--- alongside the messages. Pass nil for ordinary channels.
-local function recordChannelChat(recordAs, ChannelType, infoFields, ...)
+local function recordChannelChat(recordAs, ChannelType, ...)
     local msg, from = ...;
     local db = db.history.whispers;
     local win = windows.active.chat[recordAs];
     if(win) then
         win.widgets.history:SetHistory(true);
 
-        -- 3.16.14: constant-count guardrail. See recordWhisper() above.
-        if (isHistoryWriteBlocked()) then
-            warnHistoryFull();
-            return;
-        end
-
         local history = getPlayerHistoryTable(recordAs);
         history.info.chat = true;
         history.info.channelNumber = channelNumber;
-        if (infoFields) then
-            for k, v in pairs(infoFields) do
-                history.info[k] = v;
-            end
-        end
         local record = cacheIfCensored({
             event = ChannelType,
             channelName = recordAs,
@@ -743,8 +564,6 @@ local function recordChannelChat(recordAs, ChannelType, infoFields, ...)
             time = select(29, ...) or _G.time();
         }, ...);
         table.insert(history, record);
-        addConstant(recordAs);
-        addRecordConstants(record, #history);
         -- Blob archive: this conversation now differs from its archived copy.
         MarkHistoryDirty(env.realm, env.character, recordAs);
         if(WIM.db.history.chat.maxPer) then
@@ -764,80 +583,20 @@ function ChatHistory:PostEvent_ChatMessage(event, ...)
 
     event = event:gsub("CHAT_MSG_", "");
     if(event == "CLUB_MESSAGE_ADDED") then
-        -- 3.18.0: Community (Club) chat history.
+        -- Community (Club) chat is deliberately NOT recorded.
         --
-        -- Upstream 3.17.1 added Community chat as a WIM chat type but never
-        -- recorded it: PostEvent_ChatMessage dispatches on the event name with
-        -- "CHAT_MSG_" stripped, and CLUB_MESSAGE_ADDED carries no such prefix,
-        -- so it matched none of the branches below and fell through silently.
-        --
-        -- Args (see Channel:CLUB_MESSAGE_ADDED in Modules/ChatEngine.lua):
-        --   arg1 = message content   arg2 = author (already Ambiguate'd)
-        --   arg3 = isSelf            arg4/arg9 = "clubId:streamId"
-        local convoKey = arg4 or arg9;
-
-        -- Refuse to record content that is an unresolved protected-string
-        -- token ("|Kn6|k" and friends).
-        --
-        -- Club message content does not always arrive as text. The client can
-        -- hand it over as a |K...|k token that is resolved at DISPLAY time
-        -- against a lookup the client maintains, and that lookup does not
-        -- outlive the context it was built in: the same message renders as
-        -- "banana 1" in the Guild & Communities panel and as "Unknown"
-        -- everywhere else once that panel is closed. Blizzard's own default
-        -- chat frame shows "Unknown" for these too, so this is not something
-        -- WIM can resolve -- the text is genuinely not available to us.
-        --
-        -- Storing the token would archive a value that is already meaningless
-        -- and can never be recovered, so the message is skipped instead. An
-        -- absent record is better than a permanent "Unknown".
-        local content = arg1;
-        local isUnresolvedToken = type(content) == "string"
-                                  and string.match(content, "^|K[^|]*|k$") ~= nil;
-        if (isUnresolvedToken) then
-            dPrint("History: skipped a Community message whose content was an "
-                   .."unresolved protected string.");
-            return;
-        end
-
-        if (convoKey and db.history.chat.community) then
-            local settings = db.chat.community and db.chat.community.channelSettings
-                             and db.chat.community.channelSettings[convoKey];
-            if (not (settings and settings.noHistory)) then
-                -- Resolve the human-readable name now and refresh it on every
-                -- message, so a rename is picked up and the viewer never has to
-                -- fall back to the raw clubId:streamId key.
-                local clubId, streamId = string.match(convoKey, "^(.-):(.*)$");
-                local displayName;
-                if (clubId and streamId and _G.ChatFrameUtil
-                    and _G.ChatFrameUtil.GetCommunityAndStreamName) then
-                    local ok, name = pcall(_G.ChatFrameUtil.GetCommunityAndStreamName,
-                                           tonumber(clubId) or clubId, tonumber(streamId) or streamId);
-                    if (ok and type(name) == "string" and name ~= "") then
-                        displayName = name;
-                    end
-                end
-                -- Record the event as CHANNEL, not CLUB_MESSAGE_ADDED.
-                --
-                -- The History Viewer replays a record by rebuilding the event
-                -- name as "CHAT_MSG_"..record.event and handing it to
-                -- applyMessageFormatting, which only knows the CHAT_MSG_* set --
-                -- anything else renders as "Unknown event received...".
-                -- CHAT_MSG_CLUB_MESSAGE_ADDED is not one of them.
-                --
-                -- CHANNEL is the correct choice rather than a workaround:
-                -- upstream's own ChatEngine displays community messages in the
-                -- chat window via AddEventMessage(..., "CHAT_MSG_CHANNEL", ...),
-                -- so recording them as CHANNEL makes the history render
-                -- identically to the live window.
-                recordChannelChat(convoKey, "CHANNEL", {
-                    community = true,
-                    clubId = clubId,
-                    streamId = streamId,
-                    displayName = displayName,
-                }, ...);
-            end
-        end
+        -- 3.18.0 briefly recorded it, but the feature cannot work: the client
+        -- hands club message content over as a protected-string token
+        -- ("|Kn6|k" and friends) that is resolved at DISPLAY time, in the
+        -- client's text engine, against a session-scoped lookup Lua can never
+        -- read. The plaintext never transits Lua at any point -- not in the
+        -- event payload, not in C_Club.GetMessageInfo, not in the widgets --
+        -- so the only bytes available to persist are the token, and a stored
+        -- token is a permanent "Unknown" in every future session. Recording
+        -- and its viewer support were removed 2026-08-13; anything recorded
+        -- while the feature existed is purged at load (see
+        -- PurgeLegacyCommunityHistory in WIM.lua).
+        return;
     elseif(event == "CHANNEL") then
         local recordAs;
         local isWorld = arg7 and arg7 > 0;
@@ -848,7 +607,7 @@ function ChatHistory:PostEvent_ChatMessage(event, ...)
         if(recordAs and ((isWorld and db.history.chat.world) or (not isWorld and db.history.chat.custom))) then
             local noHistory = db.chat[isWorld and "world" or "custom"].channelSettings[channelName] and db.chat[isWorld and "world" or "custom"].channelSettings[channelName].noHistory;
             if(not noHistory) then
-                recordChannelChat(recordAs, event, nil, ...);
+                recordChannelChat(recordAs, event, ...);
             end
         end
     else
@@ -876,7 +635,7 @@ function ChatHistory:PostEvent_ChatMessage(event, ...)
         end
 
         if(recordAs) then
-            recordChannelChat(recordAs, event, nil, ...);
+            recordChannelChat(recordAs, event, ...);
         end
     end
 end
@@ -885,6 +644,22 @@ end
 --------------------------------------
 --          History Viewer          --
 --------------------------------------
+
+-- Case-insensitive name ordering for every user-facing list of
+-- characters, realms, and Battle.net tags. Lua's default sort is raw
+-- byte order, which puts every uppercase name (bytes 65-90) ahead of
+-- every lowercase one (97-122). BattleTags keep the friend's chosen
+-- casing, so lowercase-named friends sank to the bottom of every mixed
+-- list. Ties on the folded form fall back to byte order, so the
+-- comparator stays a strict weak ordering ("Bob" and "bob" must not
+-- compare equal and unordered).
+local function compareNames(a, b)
+    local la, lb = string.lower(a), string.lower(b);
+    if (la == lb) then
+        return a < b;
+    end
+    return la < lb;
+end
 
 local function searchResult(msg, search)
     search = string.lower(string.trim(search));
@@ -994,8 +769,8 @@ local function createHistoryViewer()
     -- multi-level support (info.hasArrow + info.menuList, and the level passed
     -- to the initialize function):
     --
-    --   Level 1   realms, then Battle.net Friends, then Community Chats
-    --   Level 2   a realm's characters / the BN friends / the communities
+    --   Level 1   realms, then Battle.net Friends
+    --   Level 2   a realm's characters / the BN friends
     --   Level 3   alphabetical buckets, only for groups over MAX_FLAT_ENTRIES
     --
     -- Level 3 is the safety valve: it keeps a realm with forty alts, or a long
@@ -1030,8 +805,6 @@ local function createHistoryViewer()
     --   "Realm/Character"      -> "Realm/Character"
     --   "@BN@"                 -> "Battle.net Friends"
     --   "@BN@/Tag#1234"        -> "Tag#1234"
-    --   "@COMMUNITY@"          -> "Community Chats"
-    --   "@COMMUNITY@/12:3"     -> the club's display name
     local function describeUser(value)
         if (not value or value == "") then
             return "";
@@ -1040,16 +813,20 @@ local function createHistoryViewer()
         if (realm == BN_PSEUDO_REALM) then
             if (key == "") then return L["Battle.net Friends"]; end
             return key;
-        elseif (realm == COMMUNITY_PSEUDO_REALM) then
-            if (key == "") then return L["Community Chats"]; end
-            local names = GetAllCommunityConvos();
-            return names[key] or key;
         end
         return value;
     end
 
-    local function selectValue(value)
+    -- `subset` and `label` come from BUCKET selections ("Realm (A - F)"):
+    -- subset is a { entry = true } set restricting the scope-wide view to just
+    -- that bucket's characters (realm scope) or BattleTags (BN scope), and
+    -- label is the display text, since describeUser cannot re-derive a
+    -- positional bucket from the value alone. Every non-bucket selection
+    -- passes neither and so clears the restriction.
+    local function selectValue(value, subset, label)
         win.USER = value;
+        win.USERSUBSET = subset;
+        win.USERLABEL = label or describeUser(value);
         win.CONVO = "";
         win.FILTER = "";
         win.UpdateUserList();
@@ -1060,7 +837,7 @@ local function createHistoryViewer()
         -- blank. Set the text directly; keep SetSelectedValue too so the
         -- radio ticks still track.
         DDM.UIDropDownMenu_SetSelectedValue(win.nav.user, value);
-        DDM.UIDropDownMenu_SetText(win.nav.user, describeUser(value));
+        DDM.UIDropDownMenu_SetText(win.nav.user, win.USERLABEL);
         DDM.CloseDropDownMenus();
     end
     win.nav.user.describeUser = describeUser;
@@ -1070,19 +847,52 @@ local function createHistoryViewer()
     -- CACHED PER MENU SESSION. The library calls the initialize function again
     -- for every level, so hovering into a submenu re-enters init(); rebuilding
     -- the model there would re-walk every conversation on the account on each
-    -- hover. Enumerating Battle.net and Community conversations is inherently a
-    -- full account-wide walk (both call EnsureAllHistoryLoaded and then scan the
-    -- whole tree), so on a large account that turned menu navigation into
-    -- repeated full scans. A menu session always begins at level 1, so that is
-    -- where we rebuild; deeper levels reuse the snapshot.
+    -- hover. Enumerating Battle.net conversations is inherently a full
+    -- account-wide walk (EnsureAllHistoryLoaded and then a scan of the whole
+    -- tree), so on a large account that turned menu navigation into repeated
+    -- full scans. A menu session always begins at level 1, so that is where we
+    -- rebuild; deeper levels reuse the snapshot.
     win.nav.user.getMenuModel = function(rebuild)
         if (not rebuild and win.nav.user._menuModel) then
             return win.nav.user._menuModel;
         end
-        local model = { realms = {}, realmOrder = {}, bn = {}, community = {} };
+        local model = { realms = {}, realmOrder = {}, bn = {} };
+
+        -- Selector filtering: with the "apply to menus" toggle on and a
+        -- relative window active, only entries with at least one record
+        -- inside the window are listed, and each level that lost entries
+        -- shows a greyed "-- Results Filtered --" row so a shortened list
+        -- reads as filtered, not as lost history.
+        --
+        -- Activity can only be judged with records resident, so the archive
+        -- is fully rehydrated first (one-time per session; the BN section
+        -- forces the same). The check itself is O(1) per conversation:
+        -- records append in time order, so the LAST record is the newest.
+        local cutoff = selectorCutoff(win);
+        if (cutoff) then
+            EnsureAllHistoryLoaded();
+        end
+        model.cutoff = cutoff;
+        model.filtered = { realms = false, chars = {}, bn = false };
+
+        local function convoActive(convoTbl)
+            return convoHasActivitySince(convoTbl, cutoff);
+        end
+        local function charActive(realm, character)
+            local convos = history[realm] and history[realm][character];
+            if (_G.type(convos) ~= "table") then return false; end
+            for _, convoTbl in pairs(convos) do
+                if (convoActive(convoTbl)) then return true; end
+            end
+            return false;
+        end
 
         local function noteCharacter(realm, character)
-            if (realm == BN_PSEUDO_REALM or realm == COMMUNITY_PSEUDO_REALM) then
+            if (realm == BN_PSEUDO_REALM) then
+                return;
+            end
+            if (cutoff and not charActive(realm, character)) then
+                model.filtered.chars[realm] = true;
                 return;
             end
             if (not model.realms[realm]) then
@@ -1111,20 +921,35 @@ local function createHistoryViewer()
             end
         end
 
-        table.sort(model.realmOrder);
+        -- A realm whose every character was filtered never made it into
+        -- realmOrder at all; that absence is what the level-1 marker reports.
+        for realm in pairs(model.filtered.chars) do
+            if (not model.realms[realm]) then
+                model.filtered.realms = true;
+            end
+        end
+
+        table.sort(model.realmOrder, compareNames);
         for _, realm in ipairs(model.realmOrder) do
-            table.sort(model.realms[realm]);
+            table.sort(model.realms[realm], compareNames);
         end
 
         for bnKey in pairs(GetAllBNConvoKeys()) do
-            table.insert(model.bn, bnKey);
+            local active = not cutoff;
+            if (cutoff) then
+                forEachBNConvo(bnKey, function(convoTbl, _, _)
+                    if (convoActive(convoTbl)) then active = true; end
+                end);
+            end
+            if (active) then
+                table.insert(model.bn, bnKey);
+            else
+                model.filtered.bn = true;
+            end
         end
-        table.sort(model.bn);
-
-        for convoKey, displayName in pairs(GetAllCommunityConvos()) do
-            table.insert(model.community, { key = convoKey, name = displayName });
-        end
-        table.sort(model.community, function(a, b) return a.name < b.name; end);
+        -- Case-insensitive, and the buckets inherit it: bucket boundaries and
+        -- "A - F" labels are computed from this ordering.
+        table.sort(model.bn, compareNames);
 
         win.nav.user._menuModel = model;
         return model;
@@ -1141,6 +966,26 @@ local function createHistoryViewer()
             DDM.UIDropDownMenu_AddButton(info, level);
         end
 
+        -- Greyed marker appended to any level the selector filter removed
+        -- entries from -- a shortened list must read as filtered, never as
+        -- missing history. Clicking it opens the Filters menu in its normal
+        -- spot (the "hidden by filters -> adjust filters" affordance);
+        -- keepShownOnClick stops the library's own post-click close from
+        -- immediately closing the Filters menu we just opened, so the close
+        -- is done by hand first.
+        local function addFilteredMarker()
+            add({ text = "|cff808080"..L["-- Results Filtered --"].."|r",
+                  notCheckable = true, keepShownOnClick = true,
+                  tooltipTitle = L["Results Filtered"],
+                  tooltipText = L["Click to open the Filters menu."],
+                  tooltipOnButton = true,
+                  func = function()
+                      DDM.CloseDropDownMenus();
+                      DDM.ToggleDropDownMenu(1, nil, win.nav.filters.menu,
+                                             win.nav.filters.header, 0, 0);
+                  end });
+        end
+
         -- Adds either a flat list of entries or, when there are too many, a
         -- further level of alphabetical buckets.
         local function addGroup(entries, labelOf, valueOf, bucketTag)
@@ -1154,8 +999,22 @@ local function createHistoryViewer()
             end
             local buckets = bucketize(entries, labelOf);
             for i = 1, #buckets do
-                add({ text = buckets[i].label, hasArrow = true,
-                      value = bucketTag..BUCKET_SEP..i, menuList = bucketTag..BUCKET_SEP..i });
+                -- Clicking a bucket selects the bucket-wide view: the parent
+                -- scope (realm or Battle.net section) restricted to just this
+                -- bucket's entries -- the same click-selects/hover-drills
+                -- convention every other level follows. Hovering still opens
+                -- the per-entry list at level 3.
+                local bucket = buckets[i];
+                local subset = {};
+                for j = 1, #bucket.items do
+                    subset[bucket.items[j]] = true;
+                end
+                add({ text = bucket.label, hasArrow = true,
+                      value = bucketTag..BUCKET_SEP..i, menuList = bucketTag..BUCKET_SEP..i,
+                      func = function()
+                          selectValue(bucketTag, subset,
+                                      describeUser(bucketTag).." ("..bucket.label..")");
+                      end });
             end
         end
 
@@ -1167,12 +1026,18 @@ local function createHistoryViewer()
                       func = function() selectValue(realm); end });
             end
             if (#model.bn > 0) then
+                -- Clicking the section itself selects the section-wide view
+                -- (every BN conversation, aggregated across all realms and
+                -- characters) -- the exact analogue of clicking a realm.
+                -- Hovering still opens the per-friend submenu.
                 add({ text = L["Battle.net Friends"], value = BN_PSEUDO_REALM,
-                      hasArrow = true });
+                      hasArrow = true,
+                      func = function() selectValue(BN_PSEUDO_REALM); end });
             end
-            if (#model.community > 0) then
-                add({ text = L["Community Chats"], value = COMMUNITY_PSEUDO_REALM,
-                      hasArrow = true });
+            -- Whole realms hidden, or the BN section gone entirely.
+            if (model.cutoff and (model.filtered.realms
+                or (model.filtered.bn and #model.bn == 0))) then
+                addFilteredMarker();
             end
 
         elseif (level == 2) then
@@ -1181,11 +1046,9 @@ local function createHistoryViewer()
                          function(k) return k; end,
                          function(k) return BN_PSEUDO_REALM.."/"..k; end,
                          BN_PSEUDO_REALM);
-            elseif (value == COMMUNITY_PSEUDO_REALM) then
-                addGroup(model.community,
-                         function(c) return c.name; end,
-                         function(c) return COMMUNITY_PSEUDO_REALM.."/"..c.key; end,
-                         COMMUNITY_PSEUDO_REALM);
+                if (model.cutoff and model.filtered.bn) then
+                    addFilteredMarker();
+                end
             elseif (model.realms[value]) then
                 -- No "all characters" entry here: clicking the realm itself at
                 -- level 1 already selects the realm-wide view.
@@ -1194,6 +1057,9 @@ local function createHistoryViewer()
                          function(c) return c; end,
                          function(c) return realm.."/"..c; end,
                          realm);
+                if (model.cutoff and model.filtered.chars[realm]) then
+                    addFilteredMarker();
+                end
             end
 
         elseif (level == 3) then
@@ -1210,10 +1076,6 @@ local function createHistoryViewer()
                     entries = model.bn;
                     labelOf = function(k) return k; end;
                     valueOf = function(k) return BN_PSEUDO_REALM.."/"..k; end;
-                elseif (tag == COMMUNITY_PSEUDO_REALM) then
-                    entries = model.community;
-                    labelOf = function(c) return c.name; end;
-                    valueOf = function(c) return COMMUNITY_PSEUDO_REALM.."/"..c.key; end;
                 elseif (model.realms[tag]) then
                     entries = model.realms[tag];
                     labelOf = function(c) return c; end;
@@ -1229,6 +1091,14 @@ local function createHistoryViewer()
                                   func = function() selectValue(v); end });
                         end
                     end
+                    -- The buckets were built from the already-filtered list,
+                    -- so their contents are complete; the marker just carries
+                    -- the "this group was filtered" notice down a level.
+                    if (model.cutoff
+                        and ((tag == BN_PSEUDO_REALM and model.filtered.bn)
+                             or (tag ~= BN_PSEUDO_REALM and model.filtered.chars[tag]))) then
+                        addFilteredMarker();
+                    end
                 end
             end
         end
@@ -1237,7 +1107,9 @@ local function createHistoryViewer()
     win.nav.user:SetScript("OnShow", function(self)
             DDM.UIDropDownMenu_Initialize(self, self.init);
             DDM.UIDropDownMenu_SetSelectedValue(self, win.USER);
-            DDM.UIDropDownMenu_SetText(self, self.describeUser(win.USER));
+            -- Prefer the stored label: a bucket selection's "(A - F)" suffix
+            -- cannot be re-derived from win.USER alone.
+            DDM.UIDropDownMenu_SetText(self, win.USERLABEL or self.describeUser(win.USER));
         end);
     win.nav.filters = CreateFrame("Frame", nil, win.nav);
     win.nav.filters:SetPoint("BOTTOMLEFT");
@@ -1253,6 +1125,112 @@ local function createHistoryViewer()
     win.nav.filters.text:SetPoint("BOTTOMRIGHT", win.nav.filters.border);
     win.nav.filters.text:SetText(L["Filters"]);
     win.nav.filters.text:SetTextColor(_G.GameFontNormal:GetTextColor());
+
+    -- The header doubles as the filter-MODE selector: clicking it opens a
+    -- small LibDropDownMenu menu (same lib and pattern as the user selector
+    -- above) choosing between the classic all-dates list and a relative
+    -- rolling window. The header text always names the active mode.
+    win.UpdateFilterHeader = function()
+        local mode = win.FILTERMODE;
+        local label = (mode and mode.kind == "relative") and L[mode.label]
+                      or L["All Dates"];
+        win.nav.filters.text:SetText(L["Filters"]..": "..label);
+    end
+
+    -- Cancel any in-flight render first. displayUpdate streams records
+    -- over many frames against the min/max window captured at OnShow, so
+    -- the mode must change between runs, never mid-run. Hide is the
+    -- established cancel; the progress bar's X does the same.
+    win.SetFilterMode = function(mode)
+        if (win.displayUpdate and win.displayUpdate:IsShown()) then
+            win.displayUpdate:Hide();
+        end
+        win.FILTERMODE = mode;
+        -- The selector menus derive from the window too (when the toggle is
+        -- on), so their cached model is stale the moment the mode changes.
+        win.nav.user._menuModel = nil;
+        win.UpdateFilterHeader();
+        if (win.FILTERSELECTOR) then
+            -- The conversation list depends on the window as well (in BOTH
+            -- directions -- switching back to All Dates must unfilter it):
+            -- rebuild it, and its auto-selected row cascades through the
+            -- convo/filter/display chain like any row click.
+            win.UpdateUserList();
+        else
+            win.UpdateFilterList();
+            -- Land on "Show All" within the new mode's window, not on the
+            -- newest day UpdateFilterList leaves selected.
+            win.FILTER = "";
+            win.nav.filters.scroll:Hide();
+            win.nav.filters.scroll:Show();
+            win.UpdateDisplay();
+        end
+        DDM.CloseDropDownMenus();
+    end
+
+    win.nav.filters.menu = DDM.Create_DropDownMenu("WIM3_HistoryFilterMenu", win.nav.filters);
+    win.nav.filters.menu:Hide();   -- context-style menu; the widget itself never shows
+    win.nav.filters.menu.init = function(self, level, menuList)
+        level = level or 1;
+        local mode = win.FILTERMODE or { kind = "days" };
+        local function add(info)
+            DDM.UIDropDownMenu_AddButton(info, level);
+        end
+        if (level == 1) then
+            add({ text = L["All Dates"],
+                  checked = (mode.kind ~= "relative"),
+                  func = function() win.SetFilterMode({ kind = "days" }); end });
+            add({ text = L["Relative Dates"], notCheckable = true,
+                  hasArrow = true, value = "relative", menuList = "relative" });
+            -- Extends the active relative window to the character/realm/BN
+            -- selector menus: entries with no in-window activity are hidden
+            -- (each shortened level shows a greyed "-- Results Filtered --"
+            -- row). Inert while All Dates is active.
+            add({ text = L["Apply filter to character menus"],
+                  checked = (win.FILTERSELECTOR and true or false),
+                  isNotRadio = true, keepShownOnClick = true,
+                  func = function()
+                      win.FILTERSELECTOR = not win.FILTERSELECTOR;
+                      win.nav.user._menuModel = nil;
+                      -- The visible conversation list follows the toggle
+                      -- immediately: rebuilding it auto-selects a row, and
+                      -- that selection cascades through convo/filter/display.
+                      if (win.displayUpdate and win.displayUpdate:IsShown()) then
+                          win.displayUpdate:Hide();
+                      end
+                      win.UpdateUserList();
+                  end });
+        elseif (level == 2 and DDM.UIDROPDOWNMENU_MENU_VALUE == "relative") then
+            for i = 1, #RELATIVE_PRESETS do
+                local preset = RELATIVE_PRESETS[i];
+                add({ text = L[preset.label],
+                      checked = (mode.kind == "relative" and mode.days == preset.days),
+                      func = function()
+                          win.SetFilterMode({ kind = "relative",
+                                              days = preset.days,
+                                              label = preset.label });
+                      end });
+            end
+        end
+    end
+    DDM.UIDropDownMenu_Initialize(win.nav.filters.menu, win.nav.filters.menu.init, "MENU");
+
+    win.nav.filters.header = CreateFrame("Button", nil, win.nav.filters);
+    win.nav.filters.header:SetPoint("TOPLEFT", win.nav.filters.border);
+    win.nav.filters.header:SetPoint("BOTTOMRIGHT", win.nav.filters.border);
+    win.nav.filters.header:SetScript("OnClick", function(self)
+            DDM.ToggleDropDownMenu(1, nil, win.nav.filters.menu, self, 0, 0);
+        end);
+    win.nav.filters.header:SetScript("OnEnter", function(self)
+            if(db.showToolTips == true) then
+                _G.GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT");
+                _G.GameTooltip:SetText(L["Click to change how dates are filtered."]);
+            end
+        end);
+    win.nav.filters.header:SetScript("OnLeave", function(self)
+            _G.GameTooltip:Hide();
+        end);
+
     win.nav.filters.scroll = CreateFrame("ScrollFrame", "WIM3_HistoryFilterListScroll", win.nav.filters, "FauxScrollFrameTemplate");
     win.nav.filters.scroll:SetPoint("TOPLEFT", 0, -22);
     win.nav.filters.scroll:SetPoint("BOTTOMRIGHT", -23, 0);
@@ -1323,26 +1301,34 @@ local function createHistoryViewer()
                         local dayEnd = filterDate + 86400;
                         local dateLabel = date(L["_DateFormat"], filterDate);
                         local _scopeRealm, _scopeChar = string.match(win.USER, "^([^/]+)/?(.*)$");
-                        local _isBN = (_scopeRealm == BN_PSEUDO_REALM and _scopeChar ~= "");
-                        local _isRealmView = (_scopeRealm and (not _scopeChar or _scopeChar == ""));
+                        -- BN applies to both the per-friend view
+                        -- ("@BN@/Tag#1234") and the section-wide view
+                        -- ("@BN@"); in the latter the selected conversation
+                        -- (win.CONVO) IS the BattleTag.
+                        local _isBN = (_scopeRealm == BN_PSEUDO_REALM);
+                        local _isRealmView = (not _isBN and _scopeRealm
+                                              and (not _scopeChar or _scopeChar == ""));
                         local _convoName = win.CONVO;
                         if (not _convoName or _convoName == "") then
                             return;
                         end
+                        local _bnKey = (_scopeChar ~= "" and _scopeChar) or _convoName;
 
                         local _popupText;
                         if (_isBN) then
                             _popupText = _G.format(
                                 L["Are you sure you want to delete the %s history with %s across every realm and character on this account?"],
                                 "|cff69ccf0"..dateLabel.."|r",
-                                "|cff69ccf0".._scopeChar.."|r"
+                                "|cff69ccf0".._bnKey.."|r"
                             );
                         elseif (_isRealmView) then
+                            -- USERLABEL carries the "(A - F)" bucket suffix
+                            -- when one is active.
                             _popupText = _G.format(
                                 L["Are you sure you want to delete the %s history for %s across every character on %s?"],
                                 "|cff69ccf0"..dateLabel.."|r",
                                 "|cff69ccf0".._convoName.."|r",
-                                "|cff69ccf0".._scopeRealm.."|r"
+                                "|cff69ccf0"..(win.USERLABEL or _scopeRealm).."|r"
                             );
                         else
                             _popupText = _G.format(
@@ -1387,9 +1373,10 @@ local function createHistoryViewer()
                                 local realm, character = string.match(win.USER, "^([^/]+)/?(.*)$");
                                 -- BN consolidated view: walk every
                                 -- (realm, character) slot and prune the
-                                -- matching convo on the chosen day.
-                                if ((realm == BN_PSEUDO_REALM or realm == COMMUNITY_PSEUDO_REALM) and character ~= "") then
-                                    local bnKey = character;
+                                -- matching convo on the chosen day. _bnKey
+                                -- already resolves the section-wide case.
+                                if (realm == BN_PSEUDO_REALM) then
+                                    local bnKey = _bnKey;
                                     forEachBNConvo(bnKey, function(convoTbl, cRealm, cChar)
                                         totalRemoved = totalRemoved + pruneConvo(convoTbl, cRealm, cChar, bnKey);
                                     end);
@@ -1399,9 +1386,12 @@ local function createHistoryViewer()
                                         totalRemoved = pruneConvo(convoTbl, realm, character, _convoName);
                                     end
                                 elseif (realm and history[realm]) then
-                                    -- Realm-wide view: every character.
+                                    -- Realm-wide view: every character -- or,
+                                    -- under a bucket selection, just the
+                                    -- bucket's characters (what the view shows).
                                     for rChar, convos in pairs(history[realm]) do
-                                        if (_G.type(convos) == "table" and convos[_convoName]) then
+                                        if ((not win.USERSUBSET or win.USERSUBSET[rChar])
+                                            and _G.type(convos) == "table" and convos[_convoName]) then
                                             totalRemoved = totalRemoved + pruneConvo(convos[_convoName], realm, rChar, _convoName);
                                         end
                                     end
@@ -1444,15 +1434,6 @@ local function createHistoryViewer()
                                 win.nav.filters.scroll:Show();
                                 win.UpdateDisplay();
 
-                                -- Maintain the running size estimate so the
-                                -- guardrail readout reflects reality, and
-                                -- clear the once-per-session warning latch
-                                -- in case freeing this space gets us back
-                                -- under the ceiling.
-                                if (totalRemoved > 0) then
-                                    recomputeConstantCount();
-                                    guardrailWarnedThisSession = false;
-                                end
                             end,
                             timeout = 0,
                             whileDead = 1,
@@ -1526,6 +1507,18 @@ local function createHistoryViewer()
                 button.text:SetJustifyH("LEFT");
 
                 button.SetUser = function(self, user)
+                        -- The "-- Results Filtered --" marker: greyed, no
+                        -- delete X, and clicking it opens the Filters menu
+                        -- (see OnClick) rather than selecting a conversation.
+                        -- Real rows restore the delete X below, since scroll
+                        -- rows are recycled.
+                        if (user == FILTERED_USER_MARKER) then
+                            self.user = nil;
+                            self.text:SetText("     |cff808080"..L["-- Results Filtered --"].."|r");
+                            self.delete:Hide();
+                            return;
+                        end
+                        self.delete:Show();
                         local original, extra, color = user, "";
                         local gmTag
                         user, gmTag = string.match(original, "([^*]+)(*?)$");
@@ -1539,33 +1532,31 @@ local function createHistoryViewer()
                        		return
                         end
                         self.user = user;
-                        -- Community conversations are keyed by "clubId:streamId"
-                        -- because that is what upstream's ChatEngine uses as the
-                        -- window name, and self.user has to stay exactly that so
-                        -- the history lookup still resolves. Only the LABEL is
-                        -- swapped for the readable community name -- the same
-                        -- treatment the channel settings list gives them.
-                        --
-                        -- Resolving through the API rather than walking history
-                        -- keeps this cheap: this runs per button on every list
-                        -- refresh. A community you have since left will not
-                        -- resolve, and falls back to the raw key.
-                        local label = user;
-                        if (string.find(user, "^%d+:%d+$") and _G.ChatFrameUtil
-                            and _G.ChatFrameUtil.ResolveChannelName) then
-                            local ok, resolved = pcall(_G.ChatFrameUtil.ResolveChannelName, user);
-                            if (ok and type(resolved) == "string" and resolved ~= "") then
-                                label = resolved;
-                            end
-                        end
-                        self.text:SetText("     |cff"..color..label.."|r"..extra..(gmTag == "*" and " |TInterface\\ChatFrame\\UI-ChatIcon-Blizz.blp:0:2:0:0|t" or ""));
+                        self.text:SetText("     |cff"..color..user.."|r"..extra..(gmTag == "*" and " |TInterface\\ChatFrame\\UI-ChatIcon-Blizz.blp:0:2:0:0|t" or ""));
                         if(user == win.SELECT) then
                             self:Click();
                         end
                     end
                 button:SetScript("OnClick", function(self)
+                        -- self.user is nil for the filtered-results marker
+                        -- row: it opens the Filters menu instead of selecting
+                        -- a conversation.
+                        if (not self.user) then
+                            DDM.ToggleDropDownMenu(1, nil, win.nav.filters.menu,
+                                                   win.nav.filters.header, 0, 0);
+                            return;
+                        end
                         win:SelectConvo(self.user);
                         win.nav.userList.scroll.update();
+                    end);
+                button:SetScript("OnEnter", function(self)
+                        if (not self.user and self:IsShown() and db.showToolTips == true) then
+                            _G.GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT");
+                            _G.GameTooltip:SetText(L["Results are hidden by the active filter. Click to open the Filters menu."]);
+                        end
+                    end);
+                button:SetScript("OnLeave", function(self)
+                        _G.GameTooltip:Hide();
                     end);
                 button.delete = CreateFrame("Button", nil, button);
                 button.delete:SetNormalTexture("Interface\\AddOns\\"..addonTocName.."\\Modules\\Textures\\xNormal");
@@ -1576,7 +1567,12 @@ local function createHistoryViewer()
                 button.delete:SetPoint("RIGHT");
                 button.delete:SetScript("OnClick", function(self)
                         local _bnRealm, _bnHandle = string.match(win.USER, "^([^/]+)/?(.*)$");
-                        local _isBN = (_bnRealm == BN_PSEUDO_REALM and _bnHandle ~= "");
+                        -- BN applies whether a specific friend is selected
+                        -- (win.USER = "@BN@/Tag#1234") or the whole section is
+                        -- (win.USER = "@BN@") -- in the section-wide view the
+                        -- clicked ROW carries the BattleTag instead.
+                        local _isBN = (_bnRealm == BN_PSEUDO_REALM);
+                        local _bnKey = (_bnHandle ~= "" and _bnHandle) or self:GetParent().user;
                         local _popupText;
                         if (_isBN) then
                             -- 3.16.14: extra-explicit warning, because the
@@ -1585,12 +1581,15 @@ local function createHistoryViewer()
                             -- account-wide.
                             _popupText = _G.format(
                                 L["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"],
-                                "|cff69ccf0".._bnHandle.."|r"
+                                "|cff69ccf0".._bnKey.."|r"
                             );
                         else
+                            -- USERLABEL carries the "(A - F)" bucket suffix
+                            -- when one is active, so the prompt names the
+                            -- actual scope being deleted from.
                             _popupText = _G.format(L["Are you sure you want to delete all history saved for %s on %s?"],
                                 "|cff69ccf0"..self:GetParent().user.."|r",
-                                "|cff69ccf0"..win.USER.."|r"
+                                "|cff69ccf0"..(win.USERLABEL or win.USER).."|r"
                                 );
                         end
                         _G.StaticPopupDialogs["WIM_DELETE_HISTORY"] = {
@@ -1604,9 +1603,11 @@ local function createHistoryViewer()
                                 -- Walks every (realm, character) slot and
                                 -- nils the matching BattleTag's conversation.
                                 -- The active character's splice slot is still
-                                -- preserved per the 3.16.14 invariant.
-                                if ((realm == BN_PSEUDO_REALM or realm == COMMUNITY_PSEUDO_REALM) and character ~= "") then
-                                    local bnKey = character;
+                                -- preserved per the 3.16.14 invariant. In the
+                                -- section-wide view the tag comes from the
+                                -- clicked row (_bnKey), not from win.USER.
+                                if (realm == BN_PSEUDO_REALM) then
+                                    local bnKey = _bnKey;
                                     -- 3.16.14: Collect the slots that will
                                     -- become empty BEFORE mutating, since
                                     -- pairs() over a table being mutated is
@@ -1663,13 +1664,18 @@ local function createHistoryViewer()
                                         end
                                     end
                                 elseif(realm and history[realm]) then
+                                    -- Realm-wide view; a bucket selection
+                                    -- limits the delete to what the view
+                                    -- shows: the bucket's characters.
                                     for char, convos in pairs(history[realm]) do
-                                        convos[self:GetParent().user] = nil;
-                                        MarkHistoryDirty(realm, char, self:GetParent().user);
-                                        if(isEmptyTable(convos)
-                                            and not (realm == env.realm and char == env.character))
-                                        then
-                                            history[realm][char] = nil;
+                                        if (not win.USERSUBSET or win.USERSUBSET[char]) then
+                                            convos[self:GetParent().user] = nil;
+                                            MarkHistoryDirty(realm, char, self:GetParent().user);
+                                            if(isEmptyTable(convos)
+                                                and not (realm == env.realm and char == env.character))
+                                            then
+                                                history[realm][char] = nil;
+                                            end
                                         end
                                     end
                                     if(isEmptyTable(history[realm])
@@ -1683,11 +1689,6 @@ local function createHistoryViewer()
                                 win.nav.user:Hide();
                                 win.nav.user:Show();
                                 win.UpdateUserList();
-                                -- 3.16.13: a manual deletion can free a lot of
-                                -- bytes; recalibrate so the guardrail status
-                                -- reflects reality immediately.
-                                recomputeConstantCount();
-                                guardrailWarnedThisSession = false;
                             end,
                             timeout = 0,
                             whileDead = 1,
@@ -1776,16 +1777,30 @@ local function createHistoryViewer()
             local realm, character = string.match(win.USER, "^([^/]+)/?(.*)$");
             -- 3.16.14: BN-friend consolidated view. Search across all
             -- (realm, character) slots for records under the chosen BattleTag.
-            if ((realm == BN_PSEUDO_REALM or realm == COMMUNITY_PSEUDO_REALM) and character ~= "") then
-                local bnKey = character;
+            -- When the whole section is selected (no specific friend in
+            -- win.USER), search every BattleTag -- the realm-wide analogue.
+            if (realm == BN_PSEUDO_REALM) then
                 local queryText = self:GetText();
-                forEachBNConvo(bnKey, function(convoTbl, _, _)
-                    for i = 1, #convoTbl do
-                        if (searchResult(convoTbl[i].msg, queryText)) then
-                            table.insert(win.SEARCHLIST, copyTable(convoTbl[i], {seq = i}));
+                local function searchBNKey(bnKey)
+                    forEachBNConvo(bnKey, function(convoTbl, _, _)
+                        for i = 1, #convoTbl do
+                            if (searchResult(convoTbl[i].msg, queryText)) then
+                                table.insert(win.SEARCHLIST, copyTable(convoTbl[i], {seq = i}));
+                            end
+                        end
+                    end);
+                end
+                if (character ~= "") then
+                    searchBNKey(character);
+                else
+                    -- Section-wide view; a bucket selection restricts the
+                    -- search to the bucket's tags.
+                    for bnKey, _ in pairs(GetAllBNConvoKeys()) do
+                        if (not win.USERSUBSET or win.USERSUBSET[bnKey]) then
+                            searchBNKey(bnKey);
                         end
                     end
-                end);
+                end
             elseif(realm and character and history[realm] and history[realm][character]) then
                 for convo, tbl in pairs(history[realm][character]) do
                     for i=1, #tbl do
@@ -1795,11 +1810,15 @@ local function createHistoryViewer()
                     end
                 end
             elseif(realm and history[realm]) then
+                -- Realm-wide view; a bucket selection restricts the search to
+                -- the bucket's characters.
                 for char, convos in pairs(history[realm]) do
-                    for convo, tbl in pairs(convos) do
-                        for i=1, #tbl do
-                            if(searchResult(tbl[i].msg, self:GetText())) then
-                                table.insert(win.SEARCHLIST, copyTable(tbl[i], {seq = i}));
+                    if (not win.USERSUBSET or win.USERSUBSET[char]) then
+                        for convo, tbl in pairs(convos) do
+                            for i=1, #tbl do
+                                if(searchResult(tbl[i].msg, self:GetText())) then
+                                    table.insert(win.SEARCHLIST, copyTable(tbl[i], {seq = i}));
+                                end
                             end
                         end
                     end
@@ -2035,11 +2054,15 @@ local function createHistoryViewer()
         end);
 
     win.USER = env.realm.."/"..env.character;
+    win.USERSUBSET = nil;   -- bucket restriction; see selectValue
+    win.USERLABEL = nil;    -- display label matching USER (+ bucket suffix)
     win.USERLIST = {};
     win.CONVO = "";
     win.CONVOLIST = {};
     win.FILTER = "";
     win.FILTERLIST = {};
+    win.FILTERMODE = { kind = "days" };   -- see the filter-mode block up top
+    win.FILTERSELECTOR = false;           -- extend the window to the selector menus
     win.SEARCHLIST = {};
 
     win.SelectConvo = function(self, convo)
@@ -2066,15 +2089,25 @@ local function createHistoryViewer()
             win.FILTERLIST[i] = nil;
         end
         local theList = #win.SEARCHLIST > 0 and win.SEARCHLIST or win.CONVOLIST;
+        -- Relative mode: only days inside the rolling window get a bucket
+        -- row. The window is midnight-aligned (see relativeWindowStart), so
+        -- membership is exact.
+        local cutoff = (win.FILTERMODE and win.FILTERMODE.kind == "relative")
+                       and relativeWindowStart(win.FILTERMODE.days) or nil;
         for i=1, #theList do
             local t = theList[i].time;
             local tbl = date("*t", t);
             t = time{year=tbl.year, month=tbl.month, day=tbl.day, hour=0};
-            addToTableUnique(win.FILTERLIST, t);
-            win.FILTER = t;
+            if (not cutoff or t >= cutoff) then
+                addToTableUnique(win.FILTERLIST, t);
+                win.FILTER = t;
+            end
         end
         if(#win.FILTERLIST > 0) then
             table.insert(win.FILTERLIST, 1, L["Show All"]);
+        end
+        if (win.UpdateFilterHeader) then
+            win.UpdateFilterHeader();
         end
         win.nav.filters.scroll:Hide();
         win.nav.filters.scroll:Show();
@@ -2089,7 +2122,7 @@ local function createHistoryViewer()
         -- rehydrator has already restored everything, but selecting a character
         -- it hasn't reached yet must not show an empty list.
         local _r, _c = string.match(win.USER, "^([^/]+)/?(.*)$");
-        if (_r == BN_PSEUDO_REALM or _r == COMMUNITY_PSEUDO_REALM) then
+        if (_r == BN_PSEUDO_REALM) then
             EnsureAllHistoryLoaded();
         elseif (_r and _c and _c ~= "") then
             EnsureHistoryCharacterLoaded(_r, _c);
@@ -2100,10 +2133,10 @@ local function createHistoryViewer()
         -- 3.16.14: BN-friend consolidated view. Walk every (realm, character)
         -- slot in history and pull out every record from the conversation
         -- keyed by this BattleTag.
-        if (realm == BN_PSEUDO_REALM or realm == COMMUNITY_PSEUDO_REALM) then
-            -- When a specific friend/community was selected its key is in
-            -- win.USER; when the whole section was selected the key comes from
-            -- whichever entry the user clicked in the list.
+        if (realm == BN_PSEUDO_REALM) then
+            -- When a specific friend was selected its key is in win.USER; when
+            -- the whole section was selected the key comes from whichever
+            -- entry the user clicked in the list.
             local bnKey = (character ~= "" and character) or win.CONVO;
             forEachBNConvo(bnKey, function(convoTbl, _, _)
                 for i = 1, #convoTbl do
@@ -2120,8 +2153,10 @@ local function createHistoryViewer()
            		ShowHistoryViewer()
            	end
         elseif(realm and history[realm]) then
+            -- Realm-wide view; a bucket selection restricts the aggregation
+            -- to the bucket's characters.
             for char, tbl in pairs(history[realm]) do
-                if(tbl[win.CONVO]) then
+                if((not win.USERSUBSET or win.USERSUBSET[char]) and tbl[win.CONVO]) then
                     for i=1, #tbl[win.CONVO] do
                         table.insert(win.CONVOLIST, copyTable(tbl[win.CONVO][i], {seq = i}));
                     end
@@ -2145,7 +2180,7 @@ local function createHistoryViewer()
         -- rehydrator has already restored everything, but selecting a character
         -- it hasn't reached yet must not show an empty list.
         local _r, _c = string.match(win.USER, "^([^/]+)/?(.*)$");
-        if (_r == BN_PSEUDO_REALM or _r == COMMUNITY_PSEUDO_REALM) then
+        if (_r == BN_PSEUDO_REALM) then
             EnsureAllHistoryLoaded();
         elseif (_r and _c and _c ~= "") then
             EnsureHistoryCharacterLoaded(_r, _c);
@@ -2153,48 +2188,84 @@ local function createHistoryViewer()
             EnsureHistoryRealmLoaded(_r);
         end
         local realm, character = string.match(win.USER, "^([^/]+)/?(.*)$");
+        -- Selector filter (see selectorCutoff): with the toggle on and a
+        -- relative window active, this list drops conversations with no
+        -- in-window activity too, and appends the greyed marker row so the
+        -- shortened list reads as filtered rather than as missing history.
+        local cutoff = selectorCutoff(win);
+        local hiddenByFilter = false;
+        local function bnActive(bnKey)
+            if (not cutoff) then return true; end
+            local active = false;
+            forEachBNConvo(bnKey, function(convoTbl, _, _)
+                if (convoHasActivitySince(convoTbl, cutoff)) then active = true; end
+            end);
+            return active;
+        end
         -- 3.16.14: BN-friend consolidated view. The "realm" is the BN pseudo
         -- and the "character" half is actually the BattleTag/RealID.
-        if ((realm == BN_PSEUDO_REALM or realm == COMMUNITY_PSEUDO_REALM) and character == "") then
-            -- The whole section was selected ("Battle.net Friends" or
-            -- "Community Chats" at the top level of the menu), which is the
-            -- analogue of selecting a realm: list every conversation of that
-            -- kind so the user can pick one.
-            if (realm == BN_PSEUDO_REALM) then
-                for bnKey, _ in pairs(GetAllBNConvoKeys()) do
-                    addToTableUnique(win.USERLIST, bnKey);
-                end
-            else
-                for convoKey, _ in pairs(GetAllCommunityConvos()) do
-                    addToTableUnique(win.USERLIST, convoKey);
+        if (realm == BN_PSEUDO_REALM and character == "") then
+            -- The whole section was selected ("Battle.net Friends" at the top
+            -- level of the menu), which is the analogue of selecting a realm:
+            -- list every conversation of that kind so the user can pick one.
+            -- A bucket selection restricts the list to the bucket's tags.
+            for bnKey, _ in pairs(GetAllBNConvoKeys()) do
+                if (not win.USERSUBSET or win.USERSUBSET[bnKey]) then
+                    if (bnActive(bnKey)) then
+                        addToTableUnique(win.USERLIST, bnKey);
+                    else
+                        hiddenByFilter = true;
+                    end
                 end
             end
-        elseif ((realm == BN_PSEUDO_REALM or realm == COMMUNITY_PSEUDO_REALM) and character ~= "") then
-            -- A single friend/community was selected directly. The user list
-            -- collapses to that one entry; the scroll-list machinery expects a
-            -- clickable entry in order to populate the convo list.
+        elseif (realm == BN_PSEUDO_REALM and character ~= "") then
+            -- A single friend was selected directly. The user list collapses
+            -- to that one entry; the scroll-list machinery expects a clickable
+            -- entry in order to populate the convo list.
             local bnKey = character;
-            addToTableUnique(win.USERLIST, bnKey);
+            if (bnActive(bnKey)) then
+                addToTableUnique(win.USERLIST, bnKey);
+            else
+                hiddenByFilter = true;
+            end
         elseif(realm and character and history[realm] and history[realm][character]) then
             local tbl = history[realm][character];
             for convo, t in pairs(tbl) do
-                ChannelCache[convo] = t.info and t.info.channelNumber or nil;
-                convo = (t.info and t.info.chat and "*" or "")..convo
-                addToTableUnique(win.USERLIST, convo..(t.info and t.info.gm and "*" or ""));
-            end
-        elseif(realm and (not character or character == "") and history[realm]) then
-            for char, tbl in pairs(history[realm]) do
-                for convo, t in pairs(tbl) do
+                if (not cutoff or convoHasActivitySince(t, cutoff)) then
                     ChannelCache[convo] = t.info and t.info.channelNumber or nil;
                     convo = (t.info and t.info.chat and "*" or "")..convo
                     addToTableUnique(win.USERLIST, convo..(t.info and t.info.gm and "*" or ""));
+                else
+                    hiddenByFilter = true;
+                end
+            end
+        elseif(realm and (not character or character == "") and history[realm]) then
+            -- Realm-wide view; a bucket selection restricts it to the
+            -- bucket's characters.
+            for char, tbl in pairs(history[realm]) do
+                if (not win.USERSUBSET or win.USERSUBSET[char]) then
+                    for convo, t in pairs(tbl) do
+                        if (not cutoff or convoHasActivitySince(t, cutoff)) then
+                            ChannelCache[convo] = t.info and t.info.channelNumber or nil;
+                            convo = (t.info and t.info.chat and "*" or "")..convo
+                            addToTableUnique(win.USERLIST, convo..(t.info and t.info.gm and "*" or ""));
+                        else
+                            hiddenByFilter = true;
+                        end
+                    end
                 end
             end
         end
-        table.sort(win.USERLIST);
+        table.sort(win.USERLIST, compareNames);
+        if (hiddenByFilter) then
+            -- After the sort, so the marker always sits at the bottom.
+            table.insert(win.USERLIST, FILTERED_USER_MARKER);
+        end
         win.nav.userList.scroll:Hide();
         win.nav.userList.scroll:Show();
-        if(#win.USERLIST>0) then
+        -- A list holding only the marker is empty for selection purposes;
+        -- the marker is always last, so marker-only means it is first.
+        if(#win.USERLIST > 0 and win.USERLIST[1] ~= FILTERED_USER_MARKER) then
             if(not win.SELECT) then
                 win.nav.userList.scroll.buttons[1]:Click();
             else
@@ -2364,6 +2435,20 @@ local function createDisplayUpdate()
             t = time{year=tbl.year, month=tbl.month, day=tbl.day, hour=0};
             self.min, self.max = t, t+dDay;
         end
+        -- Relative mode limits the records even on "Show All". With no
+        -- day selected, the window is the filter; with one selected, the
+        -- day is clamped to the window. A day bucket can only exist
+        -- inside the window, so the clamp is a safety check.
+        local mode = HistoryViewer.FILTERMODE;
+        if (mode and mode.kind == "relative") then
+            local cutoff = relativeWindowStart(mode.days);
+            if (self.filter) then
+                self.min = math.max(self.min, cutoff);
+            else
+                self.filter = true;
+                self.min, self.max = cutoff, math.huge;
+            end
+        end
     end);
     return displayUpdate;
 end
@@ -2500,6 +2585,8 @@ function ShowHistoryViewer(user)
 
     if(user) then
         HistoryViewer.USER = env.realm.."/"..env.character;
+        HistoryViewer.USERSUBSET = nil;
+        HistoryViewer.USERLABEL = nil;
         HistoryViewer.SELECT = user;
         HistoryViewer.nav:Hide();
         HistoryViewer.nav:Show();

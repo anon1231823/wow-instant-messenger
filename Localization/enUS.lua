@@ -169,7 +169,6 @@ WIM.AddLocale("enUS", {
     -- WhisperEngine.lua --
     ["Whisper Received!"] = true,
     ["Recently Sent Messages"] = true,
-    ["Users in %s"] = true,
 
     -- Clear.lua --
     ["You are about to clear all of WIM's history!"] = true,
@@ -204,6 +203,7 @@ WIM.AddLocale("enUS", {
     ["Right-Mouse Click!"] = true,
     ["There might be useful tools hidden under the message box. Right-Click to see them!"] = true,
 
+
     -- Options.lua --
     ["Display WIM's options."] = true,
     ["Resetting WIM will clear all of your settings!"] = true,
@@ -233,7 +233,10 @@ WIM.AddLocale("enUS", {
     ["Window Behavior"] = true,
     ["You can control how windows behave while you are in different situations."] = true,
     ["Intercept Slash Commands"] = true,
-	["Obey autofocus rules when opening frames via the menu. (autofocus if unchecked)"] = true,
+	-- Shorter display text than the key: the full key overflowed the options
+	-- panel's right edge (Window Behavior). The key stays untouched so every
+	-- other locale keeps its translation.
+	["Obey autofocus rules when opening frames via the menu. (autofocus if unchecked)"] = "Obey autofocus rules when opening via the menu (else autofocus).",
     ["Use the same rules for all states."] = true,
     ["Behaviors for state:"] = true,
     ["Pop-Up window when message is sent."] = true,
@@ -396,6 +399,7 @@ WIM.AddLocale("enUS", {
     ["World Chat"] = true,
     ["Custom Chat"] = true,
 	["Community Chat"] = true,
+	["Community Chats"] = true,
     ["Chat"] = true,
     ["Play special sound for %s."] = true,
     ["Play sound when a message is received."] = true,
@@ -420,4 +424,13 @@ WIM.AddLocale("enUS", {
 	["Green"] = true,
 	["Red"] = true,
 	["Yellow"] = true,
+
+	-- 3.16.14: Battle.net friend consolidation (History Viewer)
+	["Battle.net Friends"] = true,
+	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = true,
+
+	-- 3.16.14: Per-date deletion from the History Viewer filter list
+	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = true,
+	["Are you sure you want to delete the %s history for %s across every character on %s?"] = true,
+	["Are you sure you want to delete the %s history for %s on %s?"] = true,
 });
