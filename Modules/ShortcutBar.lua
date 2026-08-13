@@ -33,13 +33,21 @@ local function createButton(parent)
 	button.icon:SetAllPoints();
 	button:RegisterForClicks("LeftButtonUp", "RightButtonUp");
 	button.Enable = function(self)
-			self:Show();
 			self.isEnabled = true;
+			self:SetAlpha(1);
+			if(self.icon) then self.icon:SetDesaturated(false); end
+			self:Show();
 			parent:UpdateButtons();
 		end
 	button.Disable = function(self)
-			self:Hide();
 			self.isEnabled = false;
+			if(self.greyOut) then
+				self:SetAlpha(.45);
+				if(self.icon) then self.icon:SetDesaturated(true); end
+				self:Show();
+			else
+				self:Hide();
+			end
 			parent:UpdateButtons();
 		end
 	button:SetScript("OnEnter", function(self)
@@ -63,6 +71,8 @@ local function createButton(parent)
 			end
 		end);
 	button:SetScript("OnClick", function(self, button)
+			if(not self.isEnabled) then return; end
+
 			local buttons = getButtonTable(parent.type);
 
 			if(buttons[self.index].scripts and buttons[self.index].scripts.OnClick) then
@@ -163,6 +173,7 @@ local function createShortCutBar(win)
 			for i=1,#buttons do
 				self.buttons[i].index = i;
 				self.buttons[i].parentWindow = self.parentWindow;
+				self.buttons[i].greyOut = buttons[i].greyOut;
 				self.buttons[i]:SetNormalTexture(skin.buttons.NormalTexture);
 				self.buttons[i]:SetPushedTexture(skin.buttons.PushedTexture);
 				self.buttons[i]:SetHighlightTexture(skin.buttons.HighlightTexture, skin.buttons.HighlightAlphaMode);
@@ -179,11 +190,17 @@ local function createShortCutBar(win)
 					if(self.buttons[i].isEnabled) then
 						self.visibleCount = self.visibleCount + 1;
 						self.buttons[i]:SetHeight(self:GetWidth());
+					elseif(self.buttons[i].greyOut) then
+						self.visibleCount = self.visibleCount + 1;
+						self.buttons[i]:SetHeight(self:GetWidth());
 					else
 						self.buttons[i]:SetHeight(.001 - skin.spacing);
 					end
 				else
 					if(self.buttons[i].isEnabled) then
+						self.visibleCount = self.visibleCount + 1;
+						self.buttons[i]:SetWidth(self:GetHeight());
+					elseif(self.buttons[i].greyOut) then
 						self.visibleCount = self.visibleCount + 1;
 						self.buttons[i]:SetWidth(self:GetHeight());
 					else
@@ -425,19 +442,21 @@ RegisterShortcut("invite", L["Invite to Party"], {
 		end
 	});
 RegisterShortcut("guild", L["Invite to Guild"], {
+	greyOut = true,
 	OnClick = function(self)
 		local win = self.parentWindow;
 		_G.GuildInvite(win.theUser);
 	end
 });
 RegisterShortcut("friend", L["Add Friend"], {
-		OnClick = function(self)
-			_G.C_FriendList.AddFriend(self.parentWindow.theUser);
-		end,
-		SetDefaults = function(self)
-			ShortcutBar:FRIENDLIST_UPDATE();
-		end
-	});
+	greyOut = true,
+	OnClick = function(self)
+		_G.C_FriendList.AddFriend(self.parentWindow.theUser);
+	end,
+	SetDefaults = function(self)
+		ShortcutBar:FRIENDLIST_UPDATE();
+	end
+});
 RegisterShortcut("ignore", L["Ignore User"], {
 		OnClick = function(self)
 		local win = self.parentWindow;
