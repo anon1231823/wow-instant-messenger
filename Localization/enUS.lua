@@ -258,6 +258,7 @@ WIM.AddLocale("enUS", {
     ["Display Settings"] = true,
     ["Configure general window display settings."] = true,
     ["Window Skin:"] = true,
+    ["GUI Skin:"] = true,
     ["Version"] = true,
     ["Color: System Messages"] = true,
     ["Color: Error Messages"] = true,

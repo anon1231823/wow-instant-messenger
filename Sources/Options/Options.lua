@@ -6,11 +6,16 @@ local table = table;
 local type = type;
 local math = math;
 local select = select;
+local string = string;
 
 -- set namespace
 setfenv(1, WIM);
 
 options = {}; -- reference to the options interface
+
+db_defaults.optionsUI = {
+    style = "WIM",
+};
 
 local Categories = {};
 local categorySelected = 1;
@@ -35,6 +40,80 @@ local function getCategoryIndexByName(cat)
     return nil;
 end
 
+local function clearButtonTexture(button, textureName)
+    local getter = button["Get"..textureName:gsub("^%a", string.upper).."Texture"];
+    if(type(getter) == "function") then
+        local texture = getter(button);
+        if(texture) then
+            texture:SetTexture(nil);
+        end
+    end
+end
+
+function options.ApplyStyle()
+    if(not options.frame) then return; end
+    local win = options.frame;
+    local style = (db.optionsUI and db.optionsUI.style) or "WIM";
+    if(style == "Blizzard") then
+        win.backdropInfo = {
+            bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true, tileSize = 32, edgeSize = 32,
+            insets = { left = 11, right = 12, top = 12, bottom = 11 }
+        };
+    else
+        win.backdropInfo = {
+            bgFile = "Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\Frame_Background",
+            edgeFile = "Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\Frame",
+            tile = true, tileSize = 64, edgeSize = 64,
+            insets = { left = 64, right = 64, top = 64, bottom = 64 }
+        };
+    end
+    win:ApplyBackdrop();
+
+    if(win.close) then
+        if(style == "Blizzard") then
+            local defaults = win.close.defaults;
+            win.close:SetSize(32, 32);
+            win.close:SetPoint("TOPRIGHT", -2, -2);
+            win.close:SetNormalTexture(defaults.normal[1] or "Interface\\Buttons\\UI-Panel-CloseButton");
+            win.close:SetPushedTexture(defaults.pushed[1] or "Interface\\Buttons\\UI-Panel-CloseButton-Down");
+            win.close:SetHighlightTexture(defaults.highlight[1] or "Interface\\Buttons\\UI-Panel-CloseButton-Highlight", defaults.highlight[2] or "ADD");
+        else
+            win.close:SetSize(18, 18);
+            win.close:SetPoint("TOPRIGHT", -24, -20);
+            win.close:SetNormalTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\blipRed");
+            clearButtonTexture(win.close, "pushed");
+            win.close:SetHighlightTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\close", "BLEND");
+        end
+    end
+
+    if(not win.header) then
+        win.header = win:CreateTexture(nil, "BACKGROUND", "_UI-Frame-TitleTileBg");
+    end
+    if(style == "Blizzard") then
+        win.header:ClearAllPoints();
+        win.header:SetPoint("TOPLEFT", 11, -3);
+        win.header:SetPoint("TOPRIGHT", -12, -3);
+        win.header:SetHeight(40);
+        win.header:Show();
+        win.icon:Show();
+    else
+        win.header:Hide();
+        win.icon:Hide();
+    end
+    win.title:ClearAllPoints();
+    win.title:SetPoint("TOPLEFT", 50, -20);
+
+    if(win.nav) then
+        win.nav:SetWidth(150);
+    end
+
+    if(win.nav) then
+        options.UpdateCategories(win.nav);
+    end
+end
+
 local function createOptionsFrame()
     -- create frame object - changes to Patch 9.0.1 - Shadowlands, retail and classic
 	options.frame = CreateFrame("Frame", "WIM3_Options", _G.UIParent, "BackdropTemplate");
@@ -43,16 +122,8 @@ local function createOptionsFrame()
 
     -- set size and position
     win:SetWidth(600);
-    win:SetHeight(500);
+    win:SetHeight(540);
     win:SetPoint("CENTER");
-
-    -- set backdrop - changes to Patch 9.0.1 - Shadowlands, retail and classic
-    win.backdropInfo = {bgFile = "Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\Frame_Background",
-        edgeFile = "Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\Frame",
-        tile = true, tileSize = 64, edgeSize = 64,
-        insets = { left = 64, right = 64, top = 64, bottom = 64 }};
-
-	win:ApplyBackdrop();
 
     -- set basic frame properties
     win:SetClampedToScreen(true);
@@ -75,15 +146,37 @@ local function createOptionsFrame()
     win.title:SetFont(font, 16, "");
     win.title:SetText(L["WIM (WoW Instant Messenger)"].." v"..version);
 
+    -- create the WIM chat bubble logo next to the title
+    win.icon = win:CreateTexture(win:GetName().."Icon", "OVERLAY");
+    win.icon:SetTexture("Interface\\AddOns\\"..addonTocName.."\\Skins\\Default\\minimap");
+    win.icon:SetTexCoord(0.05, 0.95, 0.05, 0.95);
+    win.icon:SetWidth(24);
+    win.icon:SetHeight(24);
+    win.icon:SetPoint("RIGHT", win.title, "LEFT", -6, 0);
+
     -- create close button
-    win.close = CreateFrame("Button", win:GetName().."Close", win);
-    win.close:SetWidth(18); win.close:SetHeight(18);
+    win.close = CreateFrame("Button", win:GetName().."Close", win, "UIPanelCloseButtonDefaultAnchors");
     win.close:SetPoint("TOPRIGHT", -24, -20);
-    win.close:SetNormalTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\blipRed");
-    win.close:SetHighlightTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\close", "BLEND");
     win.close:SetScript("OnClick", function(self)
             self:GetParent():Hide();
         end);
+    -- capture the template's default textures so the Blizzard style can restore them
+    local function getButtonTextureInfo(button, textureName)
+        local info = {};
+        local getter = button["Get"..textureName:gsub("^%a", string.upper).."Texture"];
+        if(type(getter) == "function") then
+            local texture = getter(button);
+            if(texture) then
+                info[1], info[2] = texture:GetTexture(), texture:GetBlendMode();
+            end
+        end
+        return info;
+    end
+    win.close.defaults = {
+        normal = getButtonTextureInfo(win.close, "normal"),
+        pushed = getButtonTextureInfo(win.close, "pushed"),
+        highlight = getButtonTextureInfo(win.close, "highlight"),
+    };
 
 
     -- create navigation menu
@@ -138,11 +231,13 @@ local function createOptionsFrame()
 
     -- allow this window to close when escape is pressed.
     table.insert(_G.UISpecialFrames,win:GetName());
+    -- apply style (backdrop, close button, category buttons)
+    options.ApplyStyle();
     dPrint("Options frame created.");
 end
 
 local function createCategory(index)
-    local cat = CreateFrame("Button", options.frame.nav:GetName().."Cat"..index, options.frame.nav, "OptionsListButtonTemplate");
+    local cat = CreateFrame("Button", options.frame.nav:GetName().."Cat"..index, options.frame.nav);
 
     cat:RegisterForClicks("LeftButtonUp", "RightButtonUp");
     cat.info = Categories[index];
@@ -151,9 +246,10 @@ local function createCategory(index)
     cat.bg:SetAllPoints();
     cat.bg:SetColorTexture(1, 1, 1);
     cat.bg:SetGradient("VERTICAL", getGradientFromColor("658daa"));
-    cat.text = _G.getglobal(cat:GetName().."Text");
-    cat.text:ClearAllPoints();
+    cat.text = cat:CreateFontString(nil, "OVERLAY", "GameFontNormal");
     cat.text:SetPoint("CENTER");
+    cat.text:SetJustifyH("CENTER");
+    cat.text:SetJustifyV("MIDDLE");
     local font, _, _ = _G.ChatFontNormal:GetFont();
     cat.text:SetFont(font, 14, "");
     cat.text:SetText("|cffffffff"..cat.info.title.."|r");
@@ -205,6 +301,7 @@ end
 
 function options.UpdateCategories(self)
     self = self or options.frame.nav;
+    local blizzard = (db.optionsUI and db.optionsUI.style) == "Blizzard";
     self.sub:Hide();
     self.sub:ClearAllPoints();
     if(#Categories > 0) then
@@ -216,23 +313,50 @@ function options.UpdateCategories(self)
         end
 
         -- position the rest to the bottom
+        local font, _, _ = _G.ChatFontNormal:GetFont();
         local prevCat = self;
         for i=#self.category, 1, -1 do
             local cat = self.category[i];
             cat:ClearAllPoints();
+            cat:SetHeight(28);
+            cat:SetWidth(self:GetWidth()-2);
+            cat.text:SetFont(font, 14, "");
             if(i ~= categorySelected) then
                 if(prevCat == self) then
                     cat:SetPoint("BOTTOMLEFT", prevCat, "BOTTOMLEFT", 0, 0);
                 else
                     cat:SetPoint("BOTTOMLEFT", prevCat, "TOPLEFT", 0, 0);
                 end
-                cat.bg:SetGradient("VERTICAL", getGradientFromColor("658daa"));
+                if(blizzard) then
+                    cat.bg:SetColorTexture(1, 1, 1, 0);
+                    cat:SetNormalTexture("Interface\\Buttons\\UI-Panel-Button-Up");
+                    cat:SetPushedTexture("Interface\\Buttons\\UI-Panel-Button-Down");
+                    cat:SetHighlightTexture("Interface\\Buttons\\UI-Panel-Button-Highlight");
+                else
+                    cat.bg:SetGradient("VERTICAL", getGradientFromColor("658daa"));
+                    clearButtonTexture(cat, "normal");
+                    clearButtonTexture(cat, "pushed");
+                    clearButtonTexture(cat, "highlight");
+                end
                 cat:Enable();
+                cat:UnlockHighlight();
                 prevCat = cat;
             else
                 -- first item
-                cat:Disable();
-                cat.bg:SetGradient("VERTICAL", getGradientFromColor("111111"));
+                if(blizzard) then
+                    cat.bg:SetColorTexture(1, 1, 1, 0);
+                    cat:SetNormalTexture("Interface\\Buttons\\UI-Panel-Button-Down");
+                    cat:SetPushedTexture("Interface\\Buttons\\UI-Panel-Button-Down");
+                    clearButtonTexture(cat, "highlight");
+                    cat:Enable();
+                    cat:UnlockHighlight();
+                else
+                    cat:Disable();
+                    cat.bg:SetGradient("VERTICAL", getGradientFromColor("111111"));
+                    clearButtonTexture(cat, "normal");
+                    clearButtonTexture(cat, "pushed");
+                    clearButtonTexture(cat, "highlight");
+                end
                 cat:SetPoint("TOPLEFT", self, "TOPLEFT", 0, 0);
                 self.sub:SetPoint("TOPLEFT", cat, "BOTTOMLEFT", 0, 0);
                 self.sub:SetPoint("TOPRIGHT", cat, "BOTTOMRIGHT", 0, 0);

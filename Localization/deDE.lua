@@ -258,6 +258,7 @@ WIM.AddLocale("deDE", {
     ["Display Settings"] = "Anzeige-Einstellungen",
     ["Configure general window display settings."] = "Allgemeine Einstellungen zur Fensteranzeige konfigurieren.",
     ["Window Skin:"] = "Fenster-Skin:",
+    ["GUI Skin:"] = "GUI-Skin:",
     ["Version"] = true,
     ["Color: System Messages"] = "Farbe: Systemnachrichten",
     ["Color: Error Messages"] = "Farbe: Fehlernachrichten",

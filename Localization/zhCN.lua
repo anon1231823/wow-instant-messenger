@@ -258,6 +258,7 @@ WIM.AddLocale("zhCN", {
     ["Display Settings"] = "显示设置",
     ["Configure general window display settings."] = "设置窗口的显示样式。",
     ["Window Skin:"] = "聊天窗口皮肤：",
+    ["GUI Skin:"] = "界面皮肤：",
     ["Version"] = "版本",
     ["Color: System Messages"] = "系统消息颜色",
     ["Color: Error Messages"] = "错误信息颜色",

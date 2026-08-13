@@ -256,6 +256,7 @@ WIM.AddLocale("ptBR", {
     ["Display Settings"] = "Visualização",
     ["Configure general window display settings."] = "Configure a exibição geral da janela.",
     ["Window Skin:"] = "Tema da janela:",
+    ["GUI Skin:"] = "Tema da GUI:",
     ["Version"] = "Versão",
     ["Color: System Messages"] = "Cor: mensagens do sistema",
     ["Color: Error Messages"] = "Cor: mensagens de erro",

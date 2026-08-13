@@ -258,6 +258,7 @@ local translations = {
     ["Display Settings"] = "Visualización",
     ["Configure general window display settings."] = "Configura ajustes generales de visualización de ventana.",
     ["Window Skin:"] = "Estilo de ventana:",
+    ["GUI Skin:"] = "Estilo de GUI:",
     ["Version"] = "Versión",
     ["Color: System Messages"] = "Color: Mensajes de sistema",
     ["Color: Error Messages"] = "Color: Mensajes de error",

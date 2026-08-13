@@ -259,6 +259,7 @@ WIM.AddLocale("ruRU", {
 	["Display Settings"] = "Настройки отображения",
 	["Configure general window display settings."] = "Настройки отображения основного окна.",
 	["Window Skin:"] = "Шкурка окна:",
+	["GUI Skin:"] = "Шкурка интерфейса:",
 	["Version"] = "Версия",
 	["Color: System Messages"] = "Цвет: системных сообщений",
 	["Color: Error Messages"] = "Цвет: ошибок",

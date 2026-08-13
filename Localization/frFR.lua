@@ -258,6 +258,7 @@ WIM.AddLocale("frFR", {
     ["Display Settings"] = "Paramètres d'affichage",
     ["Configure general window display settings."] = "Configuration général des paramètres d'affichage des fenêtres.",
     ["Window Skin:"] = "Skin de la fenêtre :",
+    ["GUI Skin:"] = "Skin de l'interface :",
     ["Version"] = "Version",
     ["Color: System Messages"] = "Couleur : messages du système",
     ["Color: Error Messages"] = "Couleur : messages d'erreur",

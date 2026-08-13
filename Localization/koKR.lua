@@ -257,6 +257,7 @@ WIM.AddLocale("koKR", {
     ["Display Settings"] = "표시 설정",
     ["Configure general window display settings."] = "일반적인 창 표시 설정을 구성합니다.",
     ["Window Skin:"] = "창 스킨:",
+    ["GUI Skin:"] = "GUI 스킨:",
     ["Version"] = "버전",
     ["Color: System Messages"] = "색상: 시스템 메시지",
     ["Color: Error Messages"] = "색상: 오류 메시지",

@@ -257,6 +257,7 @@ WIM.AddLocale("zhTW", {
     ["Display Settings"] = "顯示設定",
     ["Configure general window display settings."] = "設定對話視窗顯示細節",
     ["Window Skin:"] = "視窗面版",
+    ["GUI Skin:"] = "介面面版",
     ["Version"] = "版本",
     ["Color: System Messages"] = "顏色：系統訊息",
     ["Color: Error Messages"] = "顏色：錯誤訊息",

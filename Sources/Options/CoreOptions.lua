@@ -387,6 +387,28 @@ local function General_VisualSettings()
     frame.menu.lastObj = frame.menu.skinText;
 
     frame.menu.nextOffSetY = -15;
+    frame.menu.guiStyleText = frame.menu:CreateText();
+    frame.menu.guiStyleText:SetText(L["GUI Skin:"]);
+    local guiStyleList = {
+        {
+            text = "WIM Classic",
+            value = "WIM",
+            justifyH = "LEFT",
+            func = function(self) options.ApplyStyle(); end,
+        },
+        {
+            text = "Blizzard",
+            value = "Blizzard",
+            justifyH = "LEFT",
+            func = function(self) options.ApplyStyle(); end,
+        },
+    };
+    frame.menu.guiStyleList = frame.menu:CreateDropDownMenu(db.optionsUI, "style", guiStyleList, 150);
+    frame.menu.guiStyleList:ClearAllPoints();
+    frame.menu.guiStyleList:SetPoint("LEFT", frame.menu.guiStyleText, "LEFT", frame.menu.skinText:GetStringWidth(), 0);
+    frame.menu.lastObj = frame.menu.guiStyleText;
+
+    frame.menu.nextOffSetY = -15;
     frame.menu:CreateColorPicker(L["Color: System Messages"], db.displayColors, "sysMsg");
     frame.menu:CreateColorPicker(L["Color: Error Messages"], db.displayColors, "errorMsg");
     frame.menu:CreateColorPicker(L["Color: URL - Web Addresses"], db.displayColors, "webAddress");
