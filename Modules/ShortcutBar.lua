@@ -316,7 +316,7 @@ function ShortcutBar:OnWindowShow(obj)
 					obj.widgets.shortcuts.buttons[i]:Enable();
 				end
 			elseif buttons[i].id == "guild" then
-				if obj.isBN or not _G.IsInGuild() or (obj.theUser and lists.guild[obj.theUser]) then
+				if obj.isBN or not _G.IsInGuild() or not _G.CanGuildInvite() or (obj.theUser and lists.guild[obj.theUser]) then
 					obj.widgets.shortcuts.buttons[i]:Disable();
 				else
 					obj.widgets.shortcuts.buttons[i]:Enable();
