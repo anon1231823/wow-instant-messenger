@@ -359,7 +359,11 @@ RegisterShortcut("location", L["Player Location"], {
 			if(button == "LeftButton") then
 				local currentSelf = self;
 				self.parentWindow:SendWho(function()
-					buttons[currentSelf.index].scripts.OnEnter(currentSelf);
+					-- upstream #271: the file-scope `buttons` is the TYPE-KEYED
+					-- registry, not a button list -- indexing it with a number
+					-- returned nil and the callback errored. Look up the window
+					-- type's list like every other handler does.
+					getButtonTable(currentSelf.parentWindow.type or "whisper")[currentSelf.index].scripts.OnEnter(currentSelf);
 					end, true)
 			else
 				WIM.MENU_ARMORY_USER = self.parentWindow.theUser;
