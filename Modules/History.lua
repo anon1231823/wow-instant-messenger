@@ -67,9 +67,10 @@ local dYear = dMonth*12;
 -- ---------------------------------------------------------------------------
 -- History Viewer filter modes.
 --
--- The Filters section supports two modes, kept in win.FILTERMODE:
+-- The Filters section supports three modes, kept in win.FILTERMODE:
 --   { kind = "days" }                       -- classic: every day, "Show All"
 --   { kind = "relative", days = N, label }  -- rolling window of whole days
+--   { kind = "metric", metric, op, value }  -- conversation-level stat filter
 --
 -- A relative window is MIDNIGHT-ALIGNED: "Last N Days" means today plus the
 -- N-1 whole days before it. That keeps the record window and the day-bucket
@@ -77,6 +78,11 @@ local dYear = dMonth*12;
 -- inside the window or entirely outside it, never straddling the cutoff.
 -- `label` stores the raw localization key; render it through L[] at display
 -- time.
+--
+-- A metric mode filters CONVERSATIONS, not records: a conversation either
+-- clears the threshold or is hidden from the conversation list, while its
+-- day buckets and records are untouched. metric is "total" | "mine" |
+-- "theirs" | "days", op is "gte" | "lt", value the preset threshold.
 -- ---------------------------------------------------------------------------
 local RELATIVE_PRESETS = {
     { days = 1,   label = "Last 1 Day"   },
@@ -91,22 +97,132 @@ local function relativeWindowStart(days)
     return todayStart - (days - 1) * dDay;
 end
 
--- The selector filter's window start, or nil when the toggle is off or no
--- relative mode is active. `win` is the History Viewer frame.
-local function selectorCutoff(win)
-    if (win.FILTERSELECTOR and win.FILTERMODE
-        and win.FILTERMODE.kind == "relative") then
-        return relativeWindowStart(win.FILTERMODE.days);
-    end
-    return nil;
-end
-
 -- O(1) activity test: records append in time order, so the LAST record of a
 -- conversation is its newest.
 local function convoHasActivitySince(convoTbl, cutoff)
     local last = type(convoTbl) == "table" and convoTbl[#convoTbl];
     return type(last) == "table" and type(last.time) == "number"
            and last.time >= cutoff;
+end
+
+-- Conversation-metric filters. Each metric reduces a conversation to one
+-- number, compared against a preset threshold:
+--   total  -- number of records in the conversation
+--   mine   -- records sent by the owning character
+--   theirs -- records received (everything not sent by the owner)
+--   days   -- distinct (midnight-aligned) days holding at least one record
+local METRIC_LABELS = {
+    total  = "Messages",
+    mine   = "Sent by Me",
+    theirs = "Sent by Them",
+    days   = "Active Days",
+};
+local METRIC_ORDER = { "total", "mine", "theirs", "days" };
+local METRIC_PRESETS = {
+    total  = { gte = { 10, 50, 100, 500 }, lt = { 10, 50 } },
+    mine   = { gte = { 5, 25, 100 },       lt = { 5, 25 } },
+    theirs = { gte = { 5, 25, 100 },       lt = { 5, 25 } },
+    days   = { gte = { 2, 5, 10, 30 },     lt = { 2, 5 } },
+};
+
+-- Header label for a metric mode: "Messages 50+", "Active Days < 5".
+local function metricModeLabel(mode)
+    if (mode.op == "lt") then
+        return L[METRIC_LABELS[mode.metric]].." < "..mode.value;
+    end
+    return L[METRIC_LABELS[mode.metric]].." "..mode.value.."+";
+end
+
+-- Metric accumulation. A row in the conversation list can aggregate several
+-- underlying tables (a BattleTag across every realm/character; a convo name
+-- across a whole realm), so stats are ACCUMULATED per row and judged once at
+-- the end. `owner` is the character the table lives under: whisper records
+-- carry an explicit inbound flag, chat records are judged by sender name.
+local function accumulateMetric(mode, stats, convoTbl, owner, anchor)
+    if (type(convoTbl) ~= "table") then return; end
+    local n = #convoTbl;
+    local m = mode.metric;
+    if (m == "total") then
+        stats.value = (stats.value or 0) + n;
+    elseif (m == "mine" or m == "theirs") then
+        local mine = 0;
+        for i = 1, n do
+            local r = convoTbl[i];
+            if (type(r) == "table") then
+                local isMine;
+                if (r.inbound ~= nil) then
+                    isMine = not r.inbound;
+                else
+                    isMine = (r.from == owner);
+                end
+                if (isMine) then mine = mine + 1; end
+            end
+        end
+        stats.value = (stats.value or 0) + (m == "mine" and mine or (n - mine));
+    else
+        -- days: aggregated tables can share calendar days, so per-table
+        -- counting would double-count -- a day-index set is required.
+        -- `anchor` is today's midnight, making indices midnight-aligned.
+        local set = stats.days;
+        if (not set) then set = {}; stats.days = set; end
+        for i = 1, n do
+            local r = convoTbl[i];
+            local t = type(r) == "table" and r.time;
+            if (type(t) == "number") then
+                set[math.floor((t - anchor) / dDay)] = true;
+            end
+        end
+    end
+end
+
+local function metricResult(mode, stats)
+    local v = stats.value or 0;
+    if (mode.metric == "days") then
+        v = 0;
+        for _ in pairs(stats.days or {}) do v = v + 1; end
+    end
+    if (mode.op == "lt") then
+        return v < mode.value;
+    end
+    return v >= mode.value;
+end
+
+-- How the active FILTERMODE prunes conversation LISTS. Returns nil (no
+-- pruning) or a context describing the test:
+--   { cutoff = t }                 -- relative window: judged by newest record
+--   { mode = mode, anchor = t0 }   -- metric: aggregate stat vs threshold
+--
+-- ANY active filter prunes the conversation list: a relative window drops
+-- conversations with no in-window activity, a metric filter drops rows that
+-- miss the threshold. The "apply to character menus" toggle only decides
+-- whether the level 1/2/3 selector menus follow suit (selectorFilterContext).
+local function listFilterContext(win)
+    local mode = win.FILTERMODE;
+    if (not mode) then return nil; end
+    if (mode.kind == "relative") then
+        return { cutoff = relativeWindowStart(mode.days) };
+    elseif (mode.kind == "metric") then
+        return { mode = mode, anchor = relativeWindowStart(1) };
+    end
+    return nil;
+end
+
+local function selectorFilterContext(win)
+    if (not win.FILTERSELECTOR) then return nil; end
+    return listFilterContext(win);
+end
+
+-- Single-table filter test (character view, and the menu model's per-
+-- character walk). Rows that aggregate several tables accumulate across
+-- them instead of calling this per table.
+local function convoPasses(ctx, convoTbl, owner)
+    if (not ctx) then return true; end
+    if (ctx.cutoff) then
+        return convoHasActivitySince(convoTbl, ctx.cutoff);
+    end
+    local stats = {};
+    accumulateMetric(ctx.mode, stats, convoTbl, owner, ctx.anchor);
+    return metricResult(ctx.mode, stats);
 end
 
 -- Sentinel appended to the user list when the selector filter hid entries;
@@ -247,6 +363,26 @@ local function forEachBNConvo(bnKey, callback)
             end
         end
     end
+end
+
+-- Aggregate filter test for one BattleTag: every conversation stored under
+-- the key -- across all realms and characters -- contributes to the
+-- judgement, matching what the BN consolidated view displays. The relative
+-- cutoff stays an any-table-passes test; metrics accumulate then judge.
+local function bnKeyPasses(ctx, bnKey)
+    if (not ctx) then return true; end
+    if (ctx.cutoff) then
+        local active = false;
+        forEachBNConvo(bnKey, function(convoTbl, _, _)
+            if (convoHasActivitySince(convoTbl, ctx.cutoff)) then active = true; end
+        end);
+        return active;
+    end
+    local stats = {};
+    forEachBNConvo(bnKey, function(convoTbl, _, character)
+        accumulateMetric(ctx.mode, stats, convoTbl, character, ctx.anchor);
+    end);
+    return metricResult(ctx.mode, stats);
 end
 -- ----------------------------------------------------------------------------
 
@@ -859,30 +995,28 @@ local function createHistoryViewer()
         local model = { realms = {}, realmOrder = {}, bn = {} };
 
         -- Selector filtering: with the "apply to menus" toggle on and a
-        -- relative window active, only entries with at least one record
-        -- inside the window are listed, and each level that lost entries
-        -- shows a greyed "-- Results Filtered --" row so a shortened list
-        -- reads as filtered, not as lost history.
+        -- relative window or metric filter active, only entries with at
+        -- least one passing conversation are listed, and each level that
+        -- lost entries shows a greyed "-- Results Filtered --" row so a
+        -- shortened list reads as filtered, not as lost history.
         --
-        -- Activity can only be judged with records resident, so the archive
+        -- Filters can only be judged with records resident, so the archive
         -- is fully rehydrated first (one-time per session; the BN section
-        -- forces the same). The check itself is O(1) per conversation:
+        -- forces the same). The relative check is O(1) per conversation:
         -- records append in time order, so the LAST record is the newest.
-        local cutoff = selectorCutoff(win);
-        if (cutoff) then
+        -- Metric checks walk the records they need.
+        local ctx = selectorFilterContext(win);
+        if (ctx) then
             EnsureAllHistoryLoaded();
         end
-        model.cutoff = cutoff;
+        model.filterActive = (ctx ~= nil);
         model.filtered = { realms = false, chars = {}, bn = false };
 
-        local function convoActive(convoTbl)
-            return convoHasActivitySince(convoTbl, cutoff);
-        end
         local function charActive(realm, character)
             local convos = history[realm] and history[realm][character];
             if (_G.type(convos) ~= "table") then return false; end
             for _, convoTbl in pairs(convos) do
-                if (convoActive(convoTbl)) then return true; end
+                if (convoPasses(ctx, convoTbl, character)) then return true; end
             end
             return false;
         end
@@ -891,7 +1025,7 @@ local function createHistoryViewer()
             if (realm == BN_PSEUDO_REALM) then
                 return;
             end
-            if (cutoff and not charActive(realm, character)) then
+            if (ctx and not charActive(realm, character)) then
                 model.filtered.chars[realm] = true;
                 return;
             end
@@ -935,13 +1069,7 @@ local function createHistoryViewer()
         end
 
         for bnKey in pairs(GetAllBNConvoKeys()) do
-            local active = not cutoff;
-            if (cutoff) then
-                forEachBNConvo(bnKey, function(convoTbl, _, _)
-                    if (convoActive(convoTbl)) then active = true; end
-                end);
-            end
-            if (active) then
+            if (bnKeyPasses(ctx, bnKey)) then
                 table.insert(model.bn, bnKey);
             else
                 model.filtered.bn = true;
@@ -1035,7 +1163,7 @@ local function createHistoryViewer()
                       func = function() selectValue(BN_PSEUDO_REALM); end });
             end
             -- Whole realms hidden, or the BN section gone entirely.
-            if (model.cutoff and (model.filtered.realms
+            if (model.filterActive and (model.filtered.realms
                 or (model.filtered.bn and #model.bn == 0))) then
                 addFilteredMarker();
             end
@@ -1046,7 +1174,7 @@ local function createHistoryViewer()
                          function(k) return k; end,
                          function(k) return BN_PSEUDO_REALM.."/"..k; end,
                          BN_PSEUDO_REALM);
-                if (model.cutoff and model.filtered.bn) then
+                if (model.filterActive and model.filtered.bn) then
                     addFilteredMarker();
                 end
             elseif (model.realms[value]) then
@@ -1057,7 +1185,7 @@ local function createHistoryViewer()
                          function(c) return c; end,
                          function(c) return realm.."/"..c; end,
                          realm);
-                if (model.cutoff and model.filtered.chars[realm]) then
+                if (model.filterActive and model.filtered.chars[realm]) then
                     addFilteredMarker();
                 end
             end
@@ -1094,7 +1222,7 @@ local function createHistoryViewer()
                     -- The buckets were built from the already-filtered list,
                     -- so their contents are complete; the marker just carries
                     -- the "this group was filtered" notice down a level.
-                    if (model.cutoff
+                    if (model.filterActive
                         and ((tag == BN_PSEUDO_REALM and model.filtered.bn)
                              or (tag ~= BN_PSEUDO_REALM and model.filtered.chars[tag]))) then
                         addFilteredMarker();
@@ -1132,8 +1260,14 @@ local function createHistoryViewer()
     -- rolling window. The header text always names the active mode.
     win.UpdateFilterHeader = function()
         local mode = win.FILTERMODE;
-        local label = (mode and mode.kind == "relative") and L[mode.label]
-                      or L["All Dates"];
+        local label;
+        if (mode and mode.kind == "relative") then
+            label = L[mode.label];
+        elseif (mode and mode.kind == "metric") then
+            label = metricModeLabel(mode);
+        else
+            label = L["No Filter"];
+        end
         win.nav.filters.text:SetText(L["Filters"]..": "..label);
     end
 
@@ -1145,15 +1279,18 @@ local function createHistoryViewer()
         if (win.displayUpdate and win.displayUpdate:IsShown()) then
             win.displayUpdate:Hide();
         end
+        -- The conversation list must be rebuilt whenever the OLD or the NEW
+        -- mode prunes it (in BOTH directions -- switching back to No Filter
+        -- must unfilter it). listFilterContext knows: any relative or metric
+        -- filter prunes the list.
+        local wasPruning = (listFilterContext(win) ~= nil);
         win.FILTERMODE = mode;
-        -- The selector menus derive from the window too (when the toggle is
+        -- The selector menus derive from the filter too (when the toggle is
         -- on), so their cached model is stale the moment the mode changes.
         win.nav.user._menuModel = nil;
         win.UpdateFilterHeader();
-        if (win.FILTERSELECTOR) then
-            -- The conversation list depends on the window as well (in BOTH
-            -- directions -- switching back to All Dates must unfilter it):
-            -- rebuild it, and its auto-selected row cascades through the
+        if (wasPruning or listFilterContext(win) ~= nil) then
+            -- Rebuild the list; its auto-selected row cascades through the
             -- convo/filter/display chain like any row click.
             win.UpdateUserList();
         else
@@ -1177,28 +1314,36 @@ local function createHistoryViewer()
             DDM.UIDropDownMenu_AddButton(info, level);
         end
         if (level == 1) then
-            add({ text = L["All Dates"],
-                  checked = (mode.kind ~= "relative"),
+            add({ text = L["No Filter"],
+                  checked = (mode.kind ~= "relative" and mode.kind ~= "metric"),
                   func = function() win.SetFilterMode({ kind = "days" }); end });
             add({ text = L["Relative Dates"], notCheckable = true,
                   hasArrow = true, value = "relative", menuList = "relative" });
-            -- Extends the active relative window to the character/realm/BN
-            -- selector menus: entries with no in-window activity are hidden
-            -- (each shortened level shows a greyed "-- Results Filtered --"
-            -- row). Inert while All Dates is active.
+            -- Conversation metrics: each submenu offers thresholds for one
+            -- stat; picking one hides conversations that miss it from the
+            -- conversation list (and, with the toggle below, the menus).
+            for i = 1, #METRIC_ORDER do
+                local metric = METRIC_ORDER[i];
+                add({ text = L[METRIC_LABELS[metric]], notCheckable = true,
+                      hasArrow = true, value = "metric:"..metric,
+                      menuList = "metric:"..metric });
+            end
+            -- Extends the active filter to the character/realm/BN selector
+            -- menus: entries with no passing conversation are hidden (each
+            -- shortened level shows a greyed "-- Results Filtered --" row).
+            -- Inert while No Filter is active.
             add({ text = L["Apply filter to character menus"],
                   checked = (win.FILTERSELECTOR and true or false),
                   isNotRadio = true, keepShownOnClick = true,
                   func = function()
                       win.FILTERSELECTOR = not win.FILTERSELECTOR;
+                      -- Only the selector menus follow this toggle; any
+                      -- active filter prunes the conversation list
+                      -- regardless. The menus rebuild lazily from the
+                      -- model on open, so invalidating the model is all
+                      -- that is needed. No list rebuild: that would reset
+                      -- the current selection for no visible change.
                       win.nav.user._menuModel = nil;
-                      -- The visible conversation list follows the toggle
-                      -- immediately: rebuilding it auto-selects a row, and
-                      -- that selection cascades through convo/filter/display.
-                      if (win.displayUpdate and win.displayUpdate:IsShown()) then
-                          win.displayUpdate:Hide();
-                      end
-                      win.UpdateUserList();
                   end });
         elseif (level == 2 and DDM.UIDROPDOWNMENU_MENU_VALUE == "relative") then
             for i = 1, #RELATIVE_PRESETS do
@@ -1210,6 +1355,28 @@ local function createHistoryViewer()
                                               days = preset.days,
                                               label = preset.label });
                       end });
+            end
+        elseif (level == 2) then
+            local metric = string.match(
+                tostring(DDM.UIDROPDOWNMENU_MENU_VALUE or ""), "^metric:(%a+)$");
+            local presets = metric and METRIC_PRESETS[metric];
+            if (presets) then
+                local function addPreset(op, value)
+                    local text = (op == "lt")
+                                 and string.format(L["Fewer than %d"], value)
+                                 or string.format(L["%d or more"], value);
+                    add({ text = text,
+                          checked = (mode.kind == "metric"
+                                     and mode.metric == metric
+                                     and mode.op == op and mode.value == value),
+                          func = function()
+                              win.SetFilterMode({ kind = "metric",
+                                                  metric = metric,
+                                                  op = op, value = value });
+                          end });
+                end
+                for i = 1, #presets.gte do addPreset("gte", presets.gte[i]); end
+                for i = 1, #presets.lt do addPreset("lt", presets.lt[i]); end
             end
         end
     end
@@ -1224,7 +1391,7 @@ local function createHistoryViewer()
     win.nav.filters.header:SetScript("OnEnter", function(self)
             if(db.showToolTips == true) then
                 _G.GameTooltip:SetOwner(self, "ANCHOR_TOPRIGHT");
-                _G.GameTooltip:SetText(L["Click to change how dates are filtered."]);
+                _G.GameTooltip:SetText(L["Click to change how history is filtered."]);
             end
         end);
     win.nav.filters.header:SetScript("OnLeave", function(self)
@@ -2062,7 +2229,7 @@ local function createHistoryViewer()
     win.FILTER = "";
     win.FILTERLIST = {};
     win.FILTERMODE = { kind = "days" };   -- see the filter-mode block up top
-    win.FILTERSELECTOR = false;           -- extend the window to the selector menus
+    win.FILTERSELECTOR = false;           -- extend the filter to the selector menus
     win.SEARCHLIST = {};
 
     win.SelectConvo = function(self, convo)
@@ -2149,9 +2316,15 @@ local function createHistoryViewer()
            	   for i=1, #tbl do
             	    table.insert(win.CONVOLIST, copyTable(tbl[i], {seq = i}));
            	   end
-           	else
-           		ShowHistoryViewer()
            	end
+            -- No else branch: a missing conversation just leaves the list
+            -- empty. Upstream called ShowHistoryViewer() here, but with no
+            -- argument that function toggles, so with the viewer open it
+            -- silently hides it. SelectConvo("") is a legitimate state (a
+            -- filter can empty a character view) and lands exactly here
+            -- with win.CONVO == ""; the old call made the viewer close
+            -- itself and keep re-closing on every reopen until a reload
+            -- reset the filter state.
         elseif(realm and history[realm]) then
             -- Realm-wide view; a bucket selection restricts the aggregation
             -- to the bucket's characters.
@@ -2188,20 +2361,12 @@ local function createHistoryViewer()
             EnsureHistoryRealmLoaded(_r);
         end
         local realm, character = string.match(win.USER, "^([^/]+)/?(.*)$");
-        -- Selector filter (see selectorCutoff): with the toggle on and a
-        -- relative window active, this list drops conversations with no
-        -- in-window activity too, and appends the greyed marker row so the
-        -- shortened list reads as filtered rather than as missing history.
-        local cutoff = selectorCutoff(win);
+        -- List filter (see listFilterContext): any active filter -- relative
+        -- window or metric -- drops conversations that fail the test and
+        -- appends the greyed marker row so the shortened list reads as
+        -- filtered rather than as missing history.
+        local ctx = listFilterContext(win);
         local hiddenByFilter = false;
-        local function bnActive(bnKey)
-            if (not cutoff) then return true; end
-            local active = false;
-            forEachBNConvo(bnKey, function(convoTbl, _, _)
-                if (convoHasActivitySince(convoTbl, cutoff)) then active = true; end
-            end);
-            return active;
-        end
         -- 3.16.14: BN-friend consolidated view. The "realm" is the BN pseudo
         -- and the "character" half is actually the BattleTag/RealID.
         if (realm == BN_PSEUDO_REALM and character == "") then
@@ -2211,7 +2376,7 @@ local function createHistoryViewer()
             -- A bucket selection restricts the list to the bucket's tags.
             for bnKey, _ in pairs(GetAllBNConvoKeys()) do
                 if (not win.USERSUBSET or win.USERSUBSET[bnKey]) then
-                    if (bnActive(bnKey)) then
+                    if (bnKeyPasses(ctx, bnKey)) then
                         addToTableUnique(win.USERLIST, bnKey);
                     else
                         hiddenByFilter = true;
@@ -2223,7 +2388,7 @@ local function createHistoryViewer()
             -- to that one entry; the scroll-list machinery expects a clickable
             -- entry in order to populate the convo list.
             local bnKey = character;
-            if (bnActive(bnKey)) then
+            if (bnKeyPasses(ctx, bnKey)) then
                 addToTableUnique(win.USERLIST, bnKey);
             else
                 hiddenByFilter = true;
@@ -2231,7 +2396,7 @@ local function createHistoryViewer()
         elseif(realm and character and history[realm] and history[realm][character]) then
             local tbl = history[realm][character];
             for convo, t in pairs(tbl) do
-                if (not cutoff or convoHasActivitySince(t, cutoff)) then
+                if (convoPasses(ctx, t, character)) then
                     ChannelCache[convo] = t.info and t.info.channelNumber or nil;
                     convo = (t.info and t.info.chat and "*" or "")..convo
                     addToTableUnique(win.USERLIST, convo..(t.info and t.info.gm and "*" or ""));
@@ -2241,17 +2406,39 @@ local function createHistoryViewer()
             end
         elseif(realm and (not character or character == "") and history[realm]) then
             -- Realm-wide view; a bucket selection restricts it to the
-            -- bucket's characters.
+            -- bucket's characters. A row here aggregates the same convo name
+            -- across every (subset) character, so a metric filter must
+            -- accumulate per NAME before judging; the relative cutoff stays
+            -- per table (any table with in-window activity keeps the row).
+            local metricStats = ctx and ctx.mode and {};
             for char, tbl in pairs(history[realm]) do
                 if (not win.USERSUBSET or win.USERSUBSET[char]) then
                     for convo, t in pairs(tbl) do
-                        if (not cutoff or convoHasActivitySince(t, cutoff)) then
+                        if (metricStats) then
+                            local s = metricStats[convo];
+                            if (not s) then s = {}; metricStats[convo] = s; end
+                            accumulateMetric(ctx.mode, s, t, char, ctx.anchor);
+                            if (not s.decorated) then
+                                ChannelCache[convo] = t.info and t.info.channelNumber or nil;
+                                s.decorated = (t.info and t.info.chat and "*" or "")..convo
+                                              ..(t.info and t.info.gm and "*" or "");
+                            end
+                        elseif (not ctx or convoHasActivitySince(t, ctx.cutoff)) then
                             ChannelCache[convo] = t.info and t.info.channelNumber or nil;
                             convo = (t.info and t.info.chat and "*" or "")..convo
                             addToTableUnique(win.USERLIST, convo..(t.info and t.info.gm and "*" or ""));
                         else
                             hiddenByFilter = true;
                         end
+                    end
+                end
+            end
+            if (metricStats) then
+                for _, s in pairs(metricStats) do
+                    if (metricResult(ctx.mode, s)) then
+                        addToTableUnique(win.USERLIST, s.decorated);
+                    else
+                        hiddenByFilter = true;
                     end
                 end
             end
