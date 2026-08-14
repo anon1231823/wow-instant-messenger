@@ -33,13 +33,13 @@ local function createButton(parent)
 	button.icon:SetAllPoints();
 	button:RegisterForClicks("LeftButtonUp", "RightButtonUp");
 	button.Enable = function(self)
-			self.isEnabled = true;
 			self:Show();
+			self.isEnabled = true;
 			parent:UpdateButtons();
 		end
 	button.Disable = function(self)
-			self.isEnabled = false;
 			self:Hide();
+			self.isEnabled = false;
 			parent:UpdateButtons();
 		end
 	button:SetScript("OnEnter", function(self)
