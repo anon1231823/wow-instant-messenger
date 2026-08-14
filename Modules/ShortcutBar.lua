@@ -41,13 +41,7 @@ local function createButton(parent)
 		end
 	button.Disable = function(self)
 			self.isEnabled = false;
-			if(self.greyOut) then
-				self:SetAlpha(.45);
-				if(self.icon) then self.icon:SetDesaturated(true); end
-				self:Show();
-			else
-				self:Hide();
-			end
+			self:Hide();
 			parent:UpdateButtons();
 		end
 	button:SetScript("OnEnter", function(self)
@@ -173,7 +167,6 @@ local function createShortCutBar(win)
 			for i=1,#buttons do
 				self.buttons[i].index = i;
 				self.buttons[i].parentWindow = self.parentWindow;
-				self.buttons[i].greyOut = buttons[i].greyOut;
 				self.buttons[i]:SetNormalTexture(skin.buttons.NormalTexture);
 				self.buttons[i]:SetPushedTexture(skin.buttons.PushedTexture);
 				self.buttons[i]:SetHighlightTexture(skin.buttons.HighlightTexture, skin.buttons.HighlightAlphaMode);
@@ -190,17 +183,11 @@ local function createShortCutBar(win)
 					if(self.buttons[i].isEnabled) then
 						self.visibleCount = self.visibleCount + 1;
 						self.buttons[i]:SetHeight(self:GetWidth());
-					elseif(self.buttons[i].greyOut) then
-						self.visibleCount = self.visibleCount + 1;
-						self.buttons[i]:SetHeight(self:GetWidth());
 					else
 						self.buttons[i]:SetHeight(.001 - skin.spacing);
 					end
 				else
 					if(self.buttons[i].isEnabled) then
-						self.visibleCount = self.visibleCount + 1;
-						self.buttons[i]:SetWidth(self:GetHeight());
-					elseif(self.buttons[i].greyOut) then
 						self.visibleCount = self.visibleCount + 1;
 						self.buttons[i]:SetWidth(self:GetHeight());
 					else
