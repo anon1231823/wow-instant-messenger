@@ -34,8 +34,6 @@ local function createButton(parent)
 	button:RegisterForClicks("LeftButtonUp", "RightButtonUp");
 	button.Enable = function(self)
 			self.isEnabled = true;
-			self:SetAlpha(1);
-			if(self.icon) then self.icon:SetDesaturated(false); end
 			self:Show();
 			parent:UpdateButtons();
 		end
