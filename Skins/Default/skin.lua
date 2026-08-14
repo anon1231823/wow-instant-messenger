@@ -254,9 +254,10 @@ local WIM_ClassicSkin = {
                     HighlightAlphaMode = "ADD",
                     icons = {
                         location = "Interface\\Icons\\Ability_TownWatch",
-                        invite = "Interface\\Icons\\Spell_Holy_BlessingOfStrength",
-                        friend = "interface\\icons\\spell_chargepositive",
-                        ignore = "Interface\\Icons\\Ability_Physical_Taunt",
+                        invite = "Interface\\Icons\\INV_Misc_GroupNeedMore",
+                        guild = "Interface\\Icons\\INV_Shirt_GuildTabard_01",
+                        friend = "Interface\\Icons\\ACHIEVEMENT_REPUTATION_01",
+                        ignore = "Interface\\Icons\\Spell_Holy_Silence",
                     }
                 }
             }

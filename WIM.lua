@@ -75,6 +75,7 @@ local function initialize()
 
 	workerFrame:RegisterEvent("GUILD_ROSTER_UPDATE");
 	workerFrame:RegisterEvent("FRIENDLIST_UPDATE");
+	workerFrame:RegisterEvent("IGNORELIST_UPDATE");
 	workerFrame:RegisterEvent("BN_FRIEND_LIST_SIZE_CHANGED");
 	workerFrame:RegisterEvent("BN_FRIEND_INFO_CHANGED");
 
