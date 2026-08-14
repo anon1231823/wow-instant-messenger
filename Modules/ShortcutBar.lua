@@ -63,8 +63,6 @@ local function createButton(parent)
 			end
 		end);
 	button:SetScript("OnClick", function(self, button)
-			if(not self.isEnabled) then return; end
-
 			local buttons = getButtonTable(parent.type);
 
 			if(buttons[self.index].scripts and buttons[self.index].scripts.OnClick) then
