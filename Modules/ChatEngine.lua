@@ -93,15 +93,16 @@ db_defaults.chat = {
     },
 	community = {
         enabled = false,
-        -- Whether WIM focuses community streams itself at login. On by default:
-        -- without it the client refuses sends to community-backed channel
-        -- numbers (see Channel:FocusCommunityStreams). Exposed as a setting only
-        -- so the pass can be A/B tested against the client's own focusing, which
-        -- is the open question in INVESTIGATION-community-send-failure.md §19.
+        -- Whether WIM focuses community streams itself at login. On by
+        -- default: without it the client refuses sends to community-backed
+        -- channel numbers (see Channel:FocusCommunityStreams). Exposed as a
+        -- setting only so the pass can be compared against the client's own
+        -- focusing. Why the client skips its own focusing while WIM is
+        -- loaded is unknown.
         autoFocusStreams = true,
-        -- Opt-in only: see readdCommunityChannels. Mutates saved chat window
+        -- Opt-in only: see reAddCommunityChannels. Mutates saved chat window
         -- configuration, so it stays off unless explicitly enabled.
-        repairChannelReadd = false,
+        repairChannelReAdd = false,
         channelSettings = {}
     },
     guild = {
@@ -1369,81 +1370,36 @@ function Channel:OnDisable()
 	end
 end
 
--- 3.18.0: WIM's presence stops the client focusing community streams at login,
--- and an unfocused stream cannot be sent to.
+-- While WIM is loaded, the client does not focus community streams at
+-- login, and an unfocused stream cannot be sent to. Why WIM's presence
+-- changes the client's behavior is unknown: WIM never calls FocusStream,
+-- never loads Blizzard_Communities, and declares no dependency on it. So
+-- this pass is remediation, not a root-cause fix.
 --
--- Verified in-game 2026-08-11:
---   * WIM disabled entirely -- /2 and every other community channel send fine
---     as the very first action after login.
---   * WIM enabled -- the client refuses with "Couldn't send message.", and so
---     does a direct C_Club.SendMessage(clubId, streamId, msg) run from a macro.
---     That call never touches the editbox, which rules out every theory that
---     blamed the send path or WIM's ChatEdit_GetActiveWindow replacement.
---   * WIM enabled, C_Club.FocusStream(clubId, streamId) run before the first
---     send -- the send succeeds AND the message appears in the default chat
---     frame, which it otherwise never did.
+-- Verified with controlled logins: with WIM disabled, community sends
+-- work immediately after login. With WIM enabled, sends are refused with
+-- "Couldn't send message.", including a direct C_Club.SendMessage from a
+-- macro, which rules out the send path and WIM's edit-box replacement.
+-- With WIM enabled and C_Club.FocusStream called before the first send,
+-- the send succeeds and the message also reaches the default chat frame.
 --
--- One unfocused stream therefore caused both symptoms. Opening the Guild &
--- Communities panel appeared to fix it only because the panel focuses the
--- stream as a side effect.
+-- The pass is safe: focusing a stream the client already lists as a
+-- numbered chat channel is what the unmodified client does, so this
+-- restores the no-addon baseline. It deliberately covers streams WIM
+-- does not monitor too, because the client refuses their sends just the
+-- same and WIM should not change which channels work.
 --
--- WHY WIM stops the client doing this itself is still unknown -- WIM never
--- calls FocusStream, never loads Blizzard_Communities and declares no
--- dependency on it. So this is remediation, not a root-cause fix; see
--- INVESTIGATION-community-send-failure.md. It is safe regardless: focusing a
--- stream the client already lists as a numbered chat channel is precisely what
--- the unmodified client does, so this restores the no-addon baseline rather
--- than inventing new behaviour. It is deliberately NOT limited to streams WIM
--- monitors -- the client refuses sends to unmonitored community channels just
--- the same, and WIM should not silently change which channels work.
--- 2026-08-11: focusing a stream AFTER the client has finished loading that
--- club's stream data stops the client routing the stream's messages to
--- CHAT_MSG_COMMUNITIES_CHANNEL, so the message sends but never reaches the
--- default chat frame. Three captures agree:
---
---   focus 20:04:56, streams loaded 20:04:57  -> event fires, message displays
---   focus 20:11:22, streams loaded 20:11:21  -> event absent, no display
---   no focus at all,  streams loaded 20:21:15 -> event fires, twice
---
--- Which side of CLUB_STREAMS_LOADED the focus pass lands on is decided by
--- whether CHANNEL_UI_UPDATE happens to arrive first, so before this gate the
--- outcome was effectively a coin flip -- the "intermittent suppression" that
--- cost several rounds of investigation to pin down.
---
--- Three controlled logins settled it, and the margin is tiny:
---
---   streams loaded 20:37:24.169, focus 20:37:24.676  (+507ms)  -> NO display
---   focus 20:37:59.069, streams loaded 20:37:59.197  (-128ms)  -> displays
---   streams loaded 20:38:54.074, focus 20:38:54.087  (+13ms)   -> NO display
---
--- Thirteen milliseconds on the wrong side of CLUB_STREAMS_LOADED is enough. And
--- an earlier capture with the pass gated off entirely still lost display, when
--- nothing subscribed the stream for 29 seconds and the Guild & Communities panel
--- eventually did it -- so a late subscription fails to wire chat routing however
--- it arrives, ours or the panel's. The client's own prompt subscription is the
--- only thing observed to wire it.
---
--- So focus early or not at all. Focusing after the club's stream data has loaded
--- buys a working send at the cost of the default chat frame.
---
--- Both ways of avoiding that cost were tried against the live client and both
--- were worse:
---
---   * Standing down at CLUB_STREAMS_LOADED -- the client then does not subscribe
---     on its own and the user cannot send at all, which is the original bug.
---   * A 3s grace period before falling back -- across three logins the client
---     took the window zero times, and one send issued during the wait was
---     silently refused. It cost sends and bought nothing.
---
--- The client's own prompt subscription has been observed exactly once in a dozen
--- captures. It is not something to wait for. So: focus as soon as the stream is
--- visible in the channel list, and accept losing the default chat frame on the
--- logins where the channel list populates after CLUB_STREAMS_LOADED.
---
--- That last part is a client ordering WIM cannot influence -- a stream cannot be
--- focused before it exists in the channel list. Sending is a hard failure and
--- outranks a missing copy in a frame the addon exists to replace; the message
--- always reaches WIM's own window.
+-- Timing matters. Focusing after the club's stream data has loaded makes
+-- the send work but stops the client from routing the stream's messages
+-- to CHAT_MSG_COMMUNITIES_CHANNEL, so they never reach the default chat
+-- frame; repeated captures put the boundary at CLUB_STREAMS_LOADED, with
+-- margins of milliseconds deciding the outcome. Waiting for the client's
+-- own subscription does not work either: it rarely arrives, and sends
+-- issued while waiting are refused. So the rule is: focus as soon as the
+-- stream appears in the channel list, and accept losing the default
+-- chat frame copy on logins where the channel list populates late. A
+-- failed send is worse than a missing copy in a frame this addon exists
+-- to replace, and the message always reaches WIM's own window.
 local clubStreamsLoaded = {};
 local subscribedStreams = {};
 local focusedStreams = {};
@@ -1487,19 +1443,18 @@ local function probeClubCapabilities()
 	dPrint("Club API probe -- absent:  "..(#missing > 0 and table.concat(missing, ", ") or "(none)"));
 end
 
--- DISPROVEN 2026-08-11: unfocus + re-focus does not recover chat routing. Three
--- late logins ran the repair, every stream reported "re-focus -> ok", and
--- CHAT_MSG_COMMUNITIES_CHANNEL still never fired. Lateness is intrinsic to the
--- focus operation, not a recoverable state, so the repair was removed rather than
--- left in to churn stream state for no benefit.
+-- Tested and disproven: unfocus plus re-focus does not recover chat
+-- routing. Three late logins ran that repair, every stream reported
+-- success, and CHAT_MSG_COMMUNITIES_CHANNEL still never fired. A late
+-- focus is not a recoverable state, so that repair was removed.
 --
--- The capability probe did show a stronger lever exists on this client:
--- ChatFrame_RemoveCommunitiesChannel and ChatFrame_AddCommunitiesChannel are both
--- present. Before using them -- they mutate the user's chat window configuration,
--- which this addon has never done -- logChatFrameChannels below establishes
--- whether the chat frames' channel lists actually differ between a late login and
--- an early one. If they are identical, re-adding the channel cannot be the fix
--- either, and the mutation would be risk taken for nothing.
+-- The capability probe showed a stronger option on this client:
+-- ChatFrame_RemoveCommunitiesChannel and ChatFrame_AddCommunitiesChannel
+-- both exist. They mutate the user's chat window configuration, which
+-- this addon has never done, so logChatFrameChannels below first checks
+-- whether the chat frames' channel lists differ between a late and an
+-- early login. If the lists are identical, re-adding the channel cannot
+-- be the fix, and the mutation would be pointless risk.
 local function logChatFrameChannels(tag)
 	for i = 1, (_G.NUM_CHAT_WINDOWS or 10) do
 		local frame = _G["ChatFrame"..i];
@@ -1536,7 +1491,7 @@ end
 -- Safety: the list is captured before and after, the add is verified,
 -- and a fallback implementation is tried before giving up loudly.
 local lateFocusHappened = false;
-local channelReaddAttempted = false;
+local channelReAddAttempted = false;
 
 local function frameHasChannel(frame, name)
 	local list = frame and frame.channelList;
@@ -1551,11 +1506,11 @@ local function frameHasChannel(frame, name)
 	return false;
 end
 
-local function readdCommunityChannels(force)
-	if (channelReaddAttempted or (not lateFocusHappened and not force)) then
+local function reAddCommunityChannels(force)
+	if (channelReAddAttempted or (not lateFocusHappened and not force)) then
 		return;
 	end
-	if (not db or db.chat.community.repairChannelReadd ~= true) then
+	if (not db or db.chat.community.repairChannelReAdd ~= true) then
 		return;
 	end
 
@@ -1563,7 +1518,7 @@ local function readdCommunityChannels(force)
 	            or (_G.ChatFrameUtil and _G.ChatFrameUtil.AddCommunitiesChannel);
 	if (not add) then
 		dPrint("Channel re-add: unavailable on this client.");
-		channelReaddAttempted = true;
+		channelReAddAttempted = true;
 		return;
 	end
 
@@ -1572,7 +1527,7 @@ local function readdCommunityChannels(force)
 	if (type(list) ~= "table" or #list == 0) then
 		return;   -- not populated yet; a later pass will catch it
 	end
-	channelReaddAttempted = true;
+	channelReAddAttempted = true;
 
 	-- Snapshot the names first: the list is mutated as we go.
 	local targets = {};
@@ -1695,32 +1650,32 @@ end
 
 -- Polls for the chat frames' channel lists becoming readable, then runs the
 -- repair once. Falls back to a single delayed attempt where NewTicker is absent.
-local readdTicker;
-local function startReaddPolling()
+local reAddTicker;
+local function startReAddPolling()
 	if (not _G.C_Timer) then
 		return;
 	end
 	if (not _G.C_Timer.NewTicker) then
 		if (_G.C_Timer.After) then
-			_G.C_Timer.After(8, function() readdCommunityChannels(); end);
+			_G.C_Timer.After(8, function() reAddCommunityChannels(); end);
 		end
 		return;
 	end
-	if (readdTicker) then
+	if (reAddTicker) then
 		return;
 	end
 
 	-- 0.25s for up to 15s. The list has populated within ~10s in every capture.
 	local ticks = 0;
-	readdTicker = _G.C_Timer.NewTicker(0.25, function(self)
+	reAddTicker = _G.C_Timer.NewTicker(0.25, function(self)
 		ticks = ticks + 1;
-		readdCommunityChannels();
-		if (channelReaddAttempted or ticks >= 60) then
-			if (not channelReaddAttempted) then
+		reAddCommunityChannels();
+		if (channelReAddAttempted or ticks >= 60) then
+			if (not channelReAddAttempted) then
 				dPrint("Channel re-add: gave up waiting for the channel list to populate.");
 			end
 			self:Cancel();
-			readdTicker = nil;
+			reAddTicker = nil;
 		end
 	end);
 end
@@ -1729,9 +1684,9 @@ end
 -- tested without waiting for a late-focus login. Safe on a healthy login
 -- too: the add only runs after a successful remove, so a rejected call
 -- changes nothing.
-function TryCommunityChannelReadd()
-	channelReaddAttempted = false;
-	readdCommunityChannels(true);
+function TryCommunityChannelReAdd()
+	channelReAddAttempted = false;
+	reAddCommunityChannels(true);
 end
 
 function Channel:FocusCommunityStreams()
@@ -1782,9 +1737,9 @@ function Channel:FocusCommunityStreams()
 						-- focus pass, but every second spent waiting is a second of
 						-- community traffic missing from the default chat frame, which
 						-- matters on a busy community. A ticker polls until the list
-						-- populates; readdCommunityChannels is a no-op until then and
+						-- populates; reAddCommunityChannels is a no-op until then and
 						-- marks itself done once it runs.
-						startReaddPolling();
+						startReAddPolling();
 					else
 						dPrint("Focused community stream "..name);
 					end
@@ -1817,11 +1772,12 @@ function Channel:CHANNEL_UI_UPDATE()
 	self:FocusCommunityStreams();
 end
 
--- NOTE: this is Channel's ONLY OnWindowDestroyed. A second definition further
--- down (added with community support) used to silently replace this one, so
--- Windows[] entries were never cleared: a closed channel/community window's
--- corpse stayed in the table, getChatWindow kept returning it, and the next
--- message went into an invisible pooled frame instead of a fresh window.
+-- NOTE: this must remain Channel's ONLY OnWindowDestroyed. A second
+-- definition later in the file would silently replace this one, and then
+-- Windows[] entries would never be cleared: a closed channel/community
+-- window's corpse would stay in the table, getChatWindow would keep
+-- returning it, and the next message would go into an invisible pooled
+-- frame instead of a fresh window.
 function Channel:OnWindowDestroyed(win)
     if(win.type == "chat" and (win.chatType == "channel" or win.chatType == "community")) then
         win.chatType = nil;
@@ -1948,11 +1904,10 @@ function Channel:CHAT_MSG_CHANNEL_NOTICE(...)
         -- handled by CLUB_MESSAGE_ADDED and the "community" chat type, which
         -- carry the club and stream IDs, so skipping them here loses nothing.
         --
-        -- The send bug remains UNRESOLVED. Note that disabling community chat
-        -- can disable this whole module via Channel:SettingsChanged(), which
-        -- takes CHAT_MSG_CHANNEL_NOTICE with it -- so a test that "fixes" the
-        -- send by turning community off does not implicate community code.
-        -- See INVESTIGATION-community-send-failure.md before theorising further.
+        -- Note that disabling community chat can disable this whole module
+        -- via Channel:SettingsChanged(), which takes CHAT_MSG_CHANNEL_NOTICE
+        -- with it -- so a test that "fixes" a community symptom by turning
+        -- community off does not implicate community code.
         -- The exact shape of the channel name here is not documented and
         -- differs between the internal name ("Community:<club>:<stream>"), the
         -- settings key ("<club>:<stream>") and the display name
@@ -2034,8 +1989,8 @@ end
 -- Community messages are handled a little bit different so we will have a separate filter for them.
 function Channel.ChatMessageCommunitiesEventFilter (frame, event, ...)
 	-- Announced before the enabled check so a debug capture can tell "the filter
-	-- never ran at all" apart from "the filter ran and bailed here". That
-	-- distinction is the whole finding of the 2026-08-11 capture.
+	-- never ran at all" apart from "the filter ran and bailed here" -- two
+	-- states that are otherwise indistinguishable from the chat frame alone.
 	if (not db or not db.chat.community.enabled) then
 		dPrint("CommunitiesFilter: entered, community chat disabled -> delivered");
 		return
@@ -2400,7 +2355,7 @@ local function loadChatOptions()
 				-- excluded every community's MAIN channel -- General is the
 				-- default stream every community is created with, and many have
 				-- no other -- so the settings list came up empty and there was
-				-- no way to enable monitoring or history for them.
+				-- no way to enable monitoring for them.
 				--
 				-- Guild and Officer streams stay excluded: WIM handles guild and
 				-- officer chat through its own modules, and listing them here
@@ -2480,14 +2435,19 @@ local function loadChatOptions()
 						local r, g, b = ChatFrameUtil.GetCommunitiesChannelColor(clubId, streamId)
 						color = { r = r, g = g, b = b };
 					end
-					-- "No History" used to be force-ticked and greyed out for
-					-- community channels, because upstream never recorded
-					-- Community chat -- the control would have been a lie. This
-					-- fork does record it (see the CLUB_MESSAGE_ADDED branch in
-					-- Modules/History.lua), so the setting is now live for
-					-- communities exactly as it is for World and Custom channels.
-					f.sub.list.buttons[i].noHistory:Enable();
-					f.sub.list.buttons[i].noHistory:SetAlpha(1);
+					-- "No History" is force-ticked and greyed out for community
+					-- channels: Community chat cannot be recorded (the client
+					-- only ever hands addons a protected-string token, never the
+					-- text -- see the CLUB_MESSAGE_ADDED branch in
+					-- Modules/History.lua), so a live control would be a lie.
+					if (channelType == "community") then
+						f.sub.list.buttons[i].noHistory:SetChecked(true);
+						f.sub.list.buttons[i].noHistory:Disable();
+						f.sub.list.buttons[i].noHistory:SetAlpha(.5);
+					else
+						f.sub.list.buttons[i].noHistory:Enable();
+						f.sub.list.buttons[i].noHistory:SetAlpha(1);
+					end
 
                     f.sub.list.buttons[i].title:SetTextColor(color.r, color.g, color.b);
                     if(active) then
@@ -2788,6 +2748,7 @@ local function createUserList()
         button.text:SetText("  Button "..i);
         button.text:SetJustifyH("LEFT");
         button.text:SetAllPoints();
+		button.text._allowCustomFont = true;
         button.SetUser = function(self, user)
             self.user = user;
             self.text:SetText("  "..user);
@@ -2818,6 +2779,39 @@ local function createUserList()
     win.scroll:SetScript("OnVerticalScroll", function(self, offset)
         _G.FauxScrollFrame_OnVerticalScroll(self, offset, win.buttons[1]:GetHeight(), win.updateList);
     end);
+
+	win.ApplySkin = function(self, skin)
+		skin = skin or GetSelectedSkin();
+
+		-- set backdrop - changes for Patch 9.0.1 - Shadowlands, retail and classic
+    	self.backdropInfo = {
+			bgFile = skin.menu.background,
+        	edgeFile = skin.menu.edge,
+        	tile = skin.menu.tile,
+			tileSize = skin.menu.tile_size,
+			edgeSize = skin.menu.edge_size,
+        	insets = {
+				left = skin.menu.insets.left,
+				right = skin.menu.insets.right,
+				top = skin.menu.insets.top,
+				bottom = skin.menu.insets.bottom
+			}
+		};
+
+		self:ApplyBackdrop();
+
+		-- title font + color. SetWidgetFont resolves every form a skin may
+		-- declare (font object name, LibSharedMedia name, or file path); a
+		-- raw SetFont here would silently no-op on anything but a path.
+		SetWidgetFont(self.title.text, skin.menu.title);
+
+		-- buttons
+		for i=1, #self.buttons do
+			local button = self.buttons[i];
+
+			SetWidgetFont(button.text, skin.menu.button);
+		end
+	end
 
     win:SetScript("OnHide", function(self)
         self:Hide();
@@ -2904,8 +2898,18 @@ function ChatOptions:OnEnableWIM()
     --create user List
     if(not ChatUserList) then
         ChatUserList = createUserList();
+		ChatUserList:ApplySkin();
     end
 end
+
+function ChatOptions:OnSkinLoaded(skin)
+	if(ChatUserList) then
+		ChatUserList:ApplySkin(skin);
+	end
+end
+
+ChatOptions.canDisable = false;
+ChatOptions:Enable();
 
 
 -- global reference

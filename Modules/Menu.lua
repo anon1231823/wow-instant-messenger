@@ -82,6 +82,7 @@ local function createButton(parent)
     button.text = _G[button:GetName().."Text"];
     button.text:ClearAllPoints();
     button.text:SetPoint("LEFT"); button.text:SetPoint("RIGHT");
+	button.text._allowCustomFont = true; -- flag that this frame allows custom fonts.
     button:GetHighlightTexture():ClearAllPoints();
     button:GetHighlightTexture():SetAllPoints();
 
@@ -89,6 +90,10 @@ local function createButton(parent)
     button.status:SetPoint("LEFT", button, "RIGHT", 0, -1);
     button.close = createCloseButton(button);
     button.close:SetPoint("LEFT", button.status, "RIGHT", 2, 0);
+
+	button.ApplySkin = function(self, skin)
+		SetWidgetFont(self.text, skin.menu.button);
+	end
 
     button:SetScript("OnClick", function(self, b)
 			local forceShow = true
@@ -182,6 +187,37 @@ local function createGroup(title, list, maxButtons, showNone)
             group:SetHeight(_G.math.max(group.title:GetHeight() + group.buttons[1]:GetHeight()*self:GetButtonCount() + 18*2, 64));
         end
     end
+
+	group.ApplySkin = function(self, skin)
+
+		-- set backdrop - changes for Patch 9.0.1 - Shadowlands, retail and classic
+    	self.backdropInfo = {
+			bgFile = skin.menu.background,
+        	edgeFile = skin.menu.edge,
+        	tile = skin.menu.tile,
+			tileSize = skin.menu.tile_size,
+			edgeSize = skin.menu.edge_size,
+        	insets = {
+				left = skin.menu.insets.left,
+				right = skin.menu.insets.right,
+				top = skin.menu.insets.top,
+				bottom = skin.menu.insets.bottom
+			}
+		};
+
+		self:ApplyBackdrop();
+
+		-- title font + color. SetWidgetFont resolves every form a skin may
+		-- declare (font object name, LibSharedMedia name, or file path); a
+		-- raw SetFont here would silently no-op on anything but a path.
+		SetWidgetFont(self.title.text, skin.menu.title);
+
+		-- buttons
+		for i=1, #self.buttons do
+			local button = self.buttons[i];
+			button:ApplySkin(skin);
+		end
+	end
     group.width = 0;
     group.Refresh = function(self)
         local maxWidth = 150-18*2;
@@ -259,6 +295,16 @@ local function createMenu()
             self:SetWidth(groupWidth);
         end
 
+	menu.ApplySkin = function(self, skin)
+
+		for i=1, #self.groups do
+			local group = self.groups[i];
+			group:ApplySkin(skin or GetSelectedSkin());
+		end
+
+		self:Refresh();
+	end
+
     menu:SetScript("OnUpdate", function(self)
             if(isMouseOver()) then
                 self.mouseStamp = _G.time();
@@ -313,6 +359,12 @@ function Menu:OnEnable()
         WIM.Menu = createMenu();
         WIM.Menu:Refresh();
     end
+end
+
+function Menu:OnSkinLoaded(skin)
+	if (WIM.Menu) then
+		WIM.Menu:ApplySkin(skin);
+	end
 end
 
 

@@ -275,7 +275,7 @@ local WIM_ClassicSkin = {
                 NormalTexture = "Interface\\MoneyFrame\\Arrow-Left-Up",
                 PushedTexture = "Interface\\MoneyFrame\\Arrow-Left-Down",
                 DisabledTexture = "Interface\\MoneyFrame\\Arrow-Left-Disabled",
-                HighlightTexture = "Interface\\AddOns\\"..WIM.addonTocName.."\\Skins\\Default\\TabArrowLeft",
+                HighlightTexture = "Interface\\AddOns\\"..WIM.addonTocName.."\\Skins\\Default\\tab_left_arrow",
                 HighlightAlphaMode = "ADD",
                 height = 20,
                 width = 20,
@@ -284,7 +284,7 @@ local WIM_ClassicSkin = {
                 NormalTexture = "Interface\\MoneyFrame\\Arrow-Right-Up",
                 PushedTexture = "Interface\\MoneyFrame\\Arrow-Right-Down",
                 DisabledTexture = "Interface\\MoneyFrame\\Arrow-Right-Disabled",
-                HighlightTexture = "Interface\\AddOns\\"..WIM.addonTocName.."\\Skins\\Default\\TabArrowRight",
+                HighlightTexture = "Interface\\AddOns\\"..WIM.addonTocName.."\\Skins\\Default\\tab_right_arrow",
                 HighlightAlphaMode = "ADD",
                 height = 20,
                 width = 20,
@@ -303,6 +303,25 @@ local WIM_ClassicSkin = {
         },
         vertical = false,
     },
+	menu = {
+		edge = "Interface\\AddOns\\"..WIM.addonTocName.."\\Modules\\Textures\\Menu",
+		edge_size = 32,
+		background = "Interface\\AddOns\\"..WIM.addonTocName.."\\Modules\\Textures\\Menu_bg",
+		tile = true,
+		tile_size = 32,
+		insets = { left = 32, right = 32, top = 32, bottom = 32 },
+		title = {
+			font = "ChatFontNormal",
+			font_color = {1, 1, 1},
+			font_height = 11,
+			font_flags = ""
+		},
+		button = {
+			font = "FriendsFont_Normal",
+			font_height = 12,
+			font_flags = ""
+		}
+	},
     emoticons = {
         width = 0,
         height = 0,

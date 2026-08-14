@@ -887,6 +887,7 @@ local function instantiateWindow(obj)
     widgets.Backdrop.bg = widgets.Backdrop:CreateTexture(fName.."Backdrop_BG", "BORDER");
     widgets.from = widgets.Backdrop:CreateFontString(fName.."BackdropFrom", "OVERLAY", "GameFontNormalLarge");
     widgets.from.widgetName = "from";
+	widgets.from._allowCustomFont = true;
     widgets.char_info = widgets.Backdrop:CreateFontString(fName.."BackdropCharacterDetails", "OVERLAY", "GameFontNormal");
     widgets.char_info.widgetName = "char_info";
 
@@ -918,6 +919,7 @@ local function instantiateWindow(obj)
     widgets.chat_display:EnableMouseWheel(1);
     widgets.chat_display.widgetName = "chat_display";
 	widgets.chat_display._isWIM = true; -- flag that this is a WIM frame.
+	widgets.chat_display._allowCustomFont = true; -- flag that this frame allows custom fonts.
 
     widgets.msg_box = CreateFrame("EditBox", fName.."MsgBox", obj);
     widgets.msg_box:SetAutoFocus(false);
@@ -926,6 +928,7 @@ local function instantiateWindow(obj)
     widgets.msg_box:SetAltArrowKeyMode(true);
     widgets.msg_box:EnableMouse(true);
     widgets.msg_box.widgetName = "msg_box";
+	widgets.msg_box._allowCustomFont = true;
 
 	-- because we're pretending to be the default chat edit box at times, we need to make sure that any calls are covered.
 	local _ghostFun = function() end;
@@ -1362,8 +1365,7 @@ local function instantiateWindow(obj)
                                 widgetObj:Show();
                                 local w, h = widgetObj:GetWidth(), widgetObj:GetHeight();
                                 minWidth = _G.math.max(minWidth, (self:SafeGetLeft() - widgetObj:GetLeft()) + w + (widgetObj:GetRight() - self:SafeGetRight()));
-                                -- Upstream 3.16.13 (credit: 3aptist), ported into this fork:
-                                -- commented out so widgets don't limit the min height.
+                                -- Commenting this line out so widgets don't limit the min height.
                                 -- minHeight = _G.math.max(minHeight, (self:SafeGetTop() - widgetObj:GetTop() - WindowParent:GetBottom()) + h + (widgetObj:GetBottom() - self:SafeGetBottom() - WindowParent:GetBottom()));
                         else
                                 widgetObj:Hide()

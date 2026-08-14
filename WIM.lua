@@ -66,7 +66,7 @@ libs.DropDownMenu = _G.LibStub:GetLibrary("LibDropDownMenu");
 
 -- called when WIM is first loaded into memory but after variables are loaded.
 local function initialize()
-    --load cached information from the WIM_Cache saved variable.
+    --load cached information from the WIM3_Cache saved variable.
 	env.cache[env.realm] = env.cache[env.realm] or {};
     env.cache[env.realm][env.character] = env.cache[env.realm][env.character] or {};
 	lists.friends = env.cache[env.realm][env.character].friendList;
@@ -140,13 +140,13 @@ local function initialize()
                       or (level == 1 and "ON (level 1, normal)")
                       or "ON (level 2, verbose event tracing)";
             _G.DEFAULT_CHAT_FRAME:AddMessage("WIM debug "..desc
-                ..(level > 0 and " - captured to SavedVariablesPerCharacter (WIM_DebugLog), written on logout or /reload." or "."));
+                ..(level > 0 and " - captured to SavedVariablesPerCharacter (WIM3_DebugLog), written on logout or /reload." or "."));
         end, L["Set debugging level: /wim debug [0|1|2]. 2 adds verbose chat event tracing."]);
     RegisterSlashCommand("focusstreams", function()
             -- Diagnostic A/B switch. With this off WIM leaves community stream
             -- focusing entirely to the client, which lets the client's own
-            -- focusing be compared against WIM's. See
-            -- INVESTIGATION-community-send-failure.md §19.
+            -- focusing be compared against WIM's (see
+            -- Channel:FocusCommunityStreams in Modules/ChatEngine.lua).
             local c = db and db.chat and db.chat.community;
             if(not c) then
                 _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: community chat settings unavailable.");
@@ -166,8 +166,8 @@ local function initialize()
                 _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: community chat settings unavailable.");
                 return;
             end
-            c.repairChannelReadd = not (c.repairChannelReadd == true);
-            if(c.repairChannelReadd) then
+            c.repairChannelReAdd = not (c.repairChannelReAdd == true);
+            if(c.repairChannelReAdd) then
                 _G.DEFAULT_CHAT_FRAME:AddMessage("WIM channel re-add repair ON (experimental)."
                     .." On logins where the community stream is focused late, WIM removes and"
                     .." re-adds community channels to ChatFrame1 about 8s after login."
@@ -176,21 +176,26 @@ local function initialize()
                 -- when it is scheduled, so enabling mid-session could already
                 -- trigger a run -- better to make that explicit than surprising,
                 -- and it lets the call signature be probed on demand.
-                if(TryCommunityChannelReadd) then
+                if(TryCommunityChannelReAdd) then
                     _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: attempting a repair now (see /wim debug output).");
-                    TryCommunityChannelReadd();
+                    TryCommunityChannelReAdd();
                 end
             else
                 _G.DEFAULT_CHAT_FRAME:AddMessage("WIM channel re-add repair OFF. No further attempts this session.");
             end
         end, L["Toggle the experimental community channel re-add repair (mutates chat window channels)."]);
     RegisterSlashCommand("debugclear", function()
-            if(_G.WIM_DebugLog) then
-                _G.WIM_DebugLog.lines = {};
+            if(_G.WIM3_DebugLog) then
+                _G.WIM3_DebugLog.lines = {};
             end
             _G.DEFAULT_CHAT_FRAME:AddMessage("WIM debug log cleared.");
         end, L["Clear the captured debug log."]);
     FRIENDLIST_UPDATE(); -- pretend event has been fired in order to get cache loaded.
+
+	if (GetSelectedSkin().title ~= db.skin.selected) then
+		LoadSkin(GetSelectedSkin().title, true);
+	end
+
     CallModuleFunction("OnInitialized");
     WindowParent:Show();
     dPrint("WIM initialized...");
@@ -214,15 +219,10 @@ function GetBNGetFriendInfo(friendIndex)
 end
 
 function GetBNGetFriendInfoByID(id)
-	-- Upstream 3.16.13 fix (credit: NiGhTwAlKeR559), ported into this fork.
-	-- Callers occasionally hand this function the whole 20-element info
-	-- table returned by GetBNGetGameAccountInfoByKName instead of the
-	-- bnetAccountID. Unwrap to the first value (the expected id).
+	-- if id is a table, refactor to used the first value (the expected id).
 	if type(id) == "table" then id = id[1] end
 
 	-- if unexpected value is passed, return nothing preventing possible errors.
-	-- C_BattleNet.GetAccountInfoByID throws a hard Lua error for anything
-	-- outside the signed 32-bit range, so validate before calling in.
 	if type(id) ~= "number" or id < -2147483648 or id > 2147483647 then
 		return
 	end
@@ -391,11 +391,6 @@ local function dequeueDeferredEvent ()
 			if event.event == "CHAT_MSG_BN_WHISPER_INFORM" then
 				event.args[13] = GetBNGetFriendInfo(0) or 0;
 			elseif event.event == "CHAT_MSG_BN_WHISPER" or event.event == "CHAT_MSG_BN_INLINE_TOAST_ALERT" then
-				-- Upstream 3.16.13 fix, ported into this fork. This used to
-				-- assign the ENTIRE table returned by
-				-- GetBNGetGameAccountInfoByKName into args[13], which is then
-				-- passed downstream as a bnetAccountID. Take element [1]
-				-- (bnetAccountID) instead.
 				local bnInfo = GetBNGetGameAccountInfoByKName(event.args[2]);
 				event.args[13] = (bnInfo and bnInfo[1]) or 0;
 			end
@@ -579,7 +574,7 @@ historyDirty = {};
 -- by the staged background loader.
 historyLoadQueue = {};
 
--- Flat queue of {realm, character, convo, tbl} of LEGACY (pre-3.17 native-table)
+-- Flat queue of {realm, character, convo, tbl} of LEGACY (original native-table)
 -- conversations still waiting to be serialized into the archive.
 historyDrainQueue = {};
 
@@ -627,13 +622,13 @@ end
 -- addon versions instead would mean parsing version strings and treating every
 -- release as a possible migration.
 --
---   0 (or absent) -- WIM 3.16.x and earlier: history is a tree of native Lua
---                    tables under WIM_History. This is the format that trips
+--   0 (or absent) -- original format: history is a tree of native Lua
+--                    tables under WIM3_History. This is the format that trips
 --                    Lua's 262,143-constant chunk limit and corrupts the file.
---   1             -- WIM 3.17.0+: history lives in WIM_HistoryArchive with each
+--   1             -- blob archive: history lives in WIM3_HistoryArchive with each
 --                    conversation stored as a serialized string blob.
 --
--- The version is stored in WIM_HistorySchema, a saved variable alongside the
+-- The version is stored in WIM3_HistorySchema, a saved variable alongside the
 -- data it describes, so the two are always backed up and restored together.
 --
 -- Absent is defined as 0 rather than "unknown", which is what lets us tell
@@ -648,14 +643,14 @@ historySchemaAtLogin = 0;
 -- Stamp the history file as being in the current format. Called only when no
 -- legacy data remains to convert.
 function FinalizeHistorySchema()
-    if (next(_G.WIM_History) == nil and GetHistorySchema() < HISTORY_SCHEMA) then
-        _G.WIM_HistorySchema = HISTORY_SCHEMA;
+    if (next(_G.WIM3_History) == nil and GetHistorySchema() < HISTORY_SCHEMA) then
+        _G.WIM3_HistorySchema = HISTORY_SCHEMA;
         dPrint("History: storage format stamped as schema "..HISTORY_SCHEMA..".");
     end
 end
 
 function GetHistorySchema()
-    local v = _G.WIM_HistorySchema;
+    local v = _G.WIM3_HistorySchema;
     if (type(v) ~= "number") then
         return 0;
     end
@@ -680,9 +675,9 @@ function EnsureHistoryCharacterLoaded(realm, character)
     if (historyLoadedChars[key]) then
         return true;
     end
-    local entry = _G.WIM_HistoryArchive
-                  and _G.WIM_HistoryArchive[realm]
-                  and _G.WIM_HistoryArchive[realm][character];
+    local entry = _G.WIM3_HistoryArchive
+                  and _G.WIM3_HistoryArchive[realm]
+                  and _G.WIM3_HistoryArchive[realm][character];
     if (not entry or type(entry.convos) ~= "table") then
         return IsHistoryCharacterLoaded(realm, character);
     end
@@ -716,8 +711,8 @@ function RehydrateHistoryConvo(realm, character, convo, blob)
     if (not tbl) then
         -- One unreadable conversation must not take the character (or the rest
         -- of the archive) down with it. Report once, then skip it.
-        local entry = _G.WIM_HistoryArchive[realm]
-                      and _G.WIM_HistoryArchive[realm][character];
+        local entry = _G.WIM3_HistoryArchive[realm]
+                      and _G.WIM3_HistoryArchive[realm][character];
         if (entry and not entry.reportedFailure) then
             entry.reportedFailure = true;
             _G.DEFAULT_CHAT_FRAME:AddMessage(_G.format(
@@ -738,7 +733,7 @@ end
 -- Viewer's realm-wide view so it can aggregate across characters even if the
 -- staged background loader hasn't reached them yet.
 function EnsureHistoryRealmLoaded(realm)
-    local chars = _G.WIM_HistoryArchive and _G.WIM_HistoryArchive[realm];
+    local chars = _G.WIM3_HistoryArchive and _G.WIM3_HistoryArchive[realm];
     if (type(chars) ~= "table") then
         return;
     end
@@ -750,10 +745,10 @@ end
 -- Rehydrate absolutely everything still pending. Used before operations that
 -- must see the whole account, such as the Battle.net friend consolidation.
 function EnsureAllHistoryLoaded()
-    if (type(_G.WIM_HistoryArchive) ~= "table") then
+    if (type(_G.WIM3_HistoryArchive) ~= "table") then
         return;
     end
-    for realm, chars in pairs(_G.WIM_HistoryArchive) do
+    for realm, chars in pairs(_G.WIM3_HistoryArchive) do
         if (type(chars) == "table") then
             for character, _ in pairs(chars) do
                 EnsureHistoryCharacterLoaded(realm, character);
@@ -769,10 +764,10 @@ function ArchiveHistoryCharacter(realm, character, dirtyEntry)
         -- The character was marked dirty and then removed from the tree
         -- entirely (its last conversation was deleted). Drop the archive entry
         -- too, otherwise the deleted history would reappear on next login.
-        if (_G.WIM_HistoryArchive[realm]) then
-            _G.WIM_HistoryArchive[realm][character] = nil;
-            if (next(_G.WIM_HistoryArchive[realm]) == nil) then
-                _G.WIM_HistoryArchive[realm] = nil;
+        if (_G.WIM3_HistoryArchive[realm]) then
+            _G.WIM3_HistoryArchive[realm][character] = nil;
+            if (next(_G.WIM3_HistoryArchive[realm]) == nil) then
+                _G.WIM3_HistoryArchive[realm] = nil;
             end
         end
         return true;
@@ -782,20 +777,20 @@ function ArchiveHistoryCharacter(realm, character, dirtyEntry)
     if (next(tbl) == nil) then
         -- Nothing left for this character: drop the entry entirely rather than
         -- keeping empty blobs around.
-        if (_G.WIM_HistoryArchive[realm]) then
-            _G.WIM_HistoryArchive[realm][character] = nil;
-            if (next(_G.WIM_HistoryArchive[realm]) == nil) then
-                _G.WIM_HistoryArchive[realm] = nil;
+        if (_G.WIM3_HistoryArchive[realm]) then
+            _G.WIM3_HistoryArchive[realm][character] = nil;
+            if (next(_G.WIM3_HistoryArchive[realm]) == nil) then
+                _G.WIM3_HistoryArchive[realm] = nil;
             end
         end
         return true;
     end
 
-    _G.WIM_HistoryArchive[realm] = _G.WIM_HistoryArchive[realm] or {};
-    local entry = _G.WIM_HistoryArchive[realm][character];
+    _G.WIM3_HistoryArchive[realm] = _G.WIM3_HistoryArchive[realm] or {};
+    local entry = _G.WIM3_HistoryArchive[realm][character];
     if (type(entry) ~= "table" or type(entry.convos) ~= "table") then
         entry = { convos = {} };
-        _G.WIM_HistoryArchive[realm][character] = entry;
+        _G.WIM3_HistoryArchive[realm][character] = entry;
         -- No usable previous entry, so everything has to be written.
         dirtyEntry = nil;
     end
@@ -841,7 +836,7 @@ end
 -- from them this session (their own per-character file cannot be updated from
 -- here, which is exactly why the archive carries a timestamp).
 function SerializeDirtyHistory()
-    if (type(_G.WIM_HistoryArchive) ~= "table") then
+    if (type(_G.WIM3_HistoryArchive) ~= "table") then
         return;
     end
     for _, who in pairs(historyDirty) do
@@ -851,76 +846,28 @@ function SerializeDirtyHistory()
 end
 
 function WIM:VARIABLES_LOADED()
-    -- -----------------------------------------------------------------------
-    -- Adopt the WIM3_* saved variables written by earlier versions.
-    --
-    -- The storage names drop the major-version number: WIM3_Data becomes
-    -- WIM_Data, and so on. The old names tied the data to a major version that
-    -- has no bearing on its format, which meant a future WIM 4 would face a
-    -- pointless rename (or carry a misleading "3" forever). The actual format
-    -- is tracked by WIM_HistorySchema instead, which changes only when the
-    -- layout does.
-    --
-    -- HOW THIS WORKS: WoW executes each addon's SavedVariables file as plain
-    -- Lua, so every assignment in the old file still runs and populates the old
-    -- WIM3_* globals whether or not those names appear in the current TOC -- the
-    -- TOC list only controls what gets WRITTEN at the next logout. So on the
-    -- first login after upgrading, the WIM3_* globals are sitting in _G fully
-    -- populated. We move each into its new name by reference (O(1), no copying
-    -- and no transient doubling of memory for a large history tree), and at
-    -- logout WoW writes the WIM_* set and drops the WIM3_* names. One login
-    -- completes the rename; nothing else in the addon needs to know about it.
-    --
-    -- The guard treats an empty {} destination as "not yet populated", so a
-    -- fresh table created elsewhere cannot mask real saved data.
-    --
-    -- MUST run before the "or {}" defaulting below, and before ANY other read
-    -- of the WIM_* globals.
-    -- -----------------------------------------------------------------------
-    local function adopt(oldName, newName)
-        local old = _G[oldName];
-        local new = _G[newName];
-        if (type(old) == "table" and next(old) ~= nil
-            and (new == nil or (type(new) == "table" and next(new) == nil)))
-        then
-            _G[newName] = old;
-        end
-        _G[oldName] = nil;
-    end
-    adopt("WIM3_Data",           "WIM_Data");
-    adopt("WIM3_Cache",          "WIM_Cache");
-    adopt("WIM3_Filters",        "WIM_Filters");
-    adopt("WIM3_ChatFilters",    "WIM_ChatFilters");
-    adopt("WIM3_Alias",          "WIM_Alias");
-    adopt("WIM3_History",        "WIM_History");
-    -- WIM3_HistoryArchive / WIM3_HistorySchema never shipped under those names,
-    -- so there is nothing to adopt for them.
-
-
     -- Debug capture. Restored before anything else so that the login-time
     -- dPrint calls -- module OnEnable, PLAYER_ENTERING_WORLD, the first chat
     -- message -- are recorded on a session where debugging was left on, instead
     -- of being lost before a slash command could be typed. See WIM.dPrint in
     -- Sources/ToolBox.lua for why this is per-character.
-    _G.WIM_DebugLog = _G.WIM_DebugLog or {};
-    _G.WIM_DebugLog.lines = _G.WIM_DebugLog.lines or {};
-    -- "level" supersedes the older "enabled" boolean; fall back to it so a log
-    -- written by an earlier build still restores correctly.
-    SetDebugLevel(_G.WIM_DebugLog.level or (_G.WIM_DebugLog.enabled and 1 or 0));
+    _G.WIM3_DebugLog = _G.WIM3_DebugLog or {};
+    _G.WIM3_DebugLog.lines = _G.WIM3_DebugLog.lines or {};
+    SetDebugLevel(_G.WIM3_DebugLog.level or 0);
 
-    _G.WIM_Data = _G.WIM_Data or {};
-    db = _G.WIM_Data;
-    _G.WIM_Cache = _G.WIM_Cache or {};
-    env.cache = _G.WIM_Cache;
-    _G.WIM_Filters = _G.WIM_Filters or GetDefaultFilters();
-    _G.WIM_ChatFilters = _G.WIM_ChatFilters or {};
-    if(#_G.WIM_Filters == 0) then
-        _G.WIM_Filters = GetDefaultFilters();
+    _G.WIM3_Data = _G.WIM3_Data or {};
+    db = _G.WIM3_Data;
+    _G.WIM3_Cache = _G.WIM3_Cache or {};
+    env.cache = _G.WIM3_Cache;
+    _G.WIM3_Filters = _G.WIM3_Filters or GetDefaultFilters();
+    _G.WIM3_ChatFilters = _G.WIM3_ChatFilters or {};
+    if(#_G.WIM3_Filters == 0) then
+        _G.WIM3_Filters = GetDefaultFilters();
     end
-    filters = _G.WIM_Filters;
-    chatFilters = _G.WIM_ChatFilters;
+    filters = _G.WIM3_Filters;
+    chatFilters = _G.WIM3_ChatFilters;
 
-    -- 3.16.13 Bug fix:
+    -- Bug fix (issue #251):
     --   Once WIM.lua approaches ~25MB the WoW client fails to parse it on the
     --   next login with "constant table overflow", resetting the ENTIRE file --
     --   settings and history together. The limit is Lua 5.1's cap on unique
@@ -937,7 +884,7 @@ function WIM:VARIABLES_LOADED()
     --   are logged in as, so every other character's history becomes invisible.
     --   That is a dead end and is not used here.
     --
-    --   3.17 keeps history ACCOUNT-WIDE in WIM_HistoryArchive, storing each
+    --   The fix keeps history ACCOUNT-WIDE in WIM3_HistoryArchive, storing each
     --   conversation as a serialized string. The constant limit counts the
     --   NUMBER of constants, not their size, so one conversation costs one
     --   constant no matter how long it is, and loadstring() gives each blob
@@ -963,13 +910,13 @@ function WIM:VARIABLES_LOADED()
     env.realm = _G.GetRealmName();
     env.character = _G.UnitName("player");
 
-    -- History storage. WIM_History is the legacy holding pen: WIM 3.16.x and
-    -- earlier wrote the whole history tree here as native Lua tables, and it is
-    -- drained into the archive in the background further down. WIM_HistoryArchive
+    -- History storage. WIM3_History is the legacy holding pen: earlier versions
+    -- wrote the whole history tree here as native Lua tables, and it is
+    -- drained into the archive in the background further down. WIM3_HistoryArchive
     -- is the current format -- one serialized string per conversation.
-    -- WIM_HistorySchema is deliberately NOT defaulted; absent means 0.
-    _G.WIM_History = _G.WIM_History or {};
-    _G.WIM_HistoryArchive = _G.WIM_HistoryArchive or {};
+    -- WIM3_HistorySchema is deliberately NOT defaulted; absent means 0.
+    _G.WIM3_History = _G.WIM3_History or {};
+    _G.WIM3_HistoryArchive = _G.WIM3_HistoryArchive or {};
 
     -- Snapshot the on-disk schema BEFORE we convert anything, so the rest of
     -- this function can tell what state the data arrived in.
@@ -993,12 +940,12 @@ function WIM:VARIABLES_LOADED()
     --
     -- IMPORTANT (changed in the blob-archive rework): `history` is now a plain
     -- RUNTIME table, NOT a saved variable. Previously it aliased
-    -- _G.WIM_History directly, which meant everything the History Viewer had
+    -- _G.WIM3_History directly, which meant everything the History Viewer had
     -- in memory got serialized back into the account-wide file as native Lua
     -- tables -- the exact thing that trips the 262,143-constant chunk limit.
     --
     -- Now the tree is assembled at login by rehydrating blobs out of
-    -- _G.WIM_HistoryArchive -- every character the same way, including the one
+    -- _G.WIM3_HistoryArchive -- every character the same way, including the one
     -- you are logged into -- and thrown away at logout. Persistence back to the
     -- archive happens explicitly, blob by blob, in SerializeDirtyHistory().
     history = {};
@@ -1021,12 +968,11 @@ function WIM:VARIABLES_LOADED()
     EnsureHistoryCharacterLoaded(env.realm, env.character);
 
     -- ---------------------------------------------------------------------
-    -- Drain LEGACY per-account history (pre-3.17 native-table format) into the
-    -- blob archive. This is what converts an UPSTREAM user's entire account in
-    -- one login, and what mops up any characters our fork's earlier versions
-    -- left in the shared tree.
+    -- Drain LEGACY per-account history (original native-table format) into the
+    -- blob archive. This is what converts an upgrading user's entire account
+    -- in one login.
     --
-    -- Three properties earlier versions of this code got wrong, now guaranteed:
+    -- Three properties the drain guarantees:
     --
     --  * MERGE-AWARE. If the archive already has a conversation, the archive
     --    wins (it is newer -- written by a session where that character was
@@ -1041,21 +987,21 @@ function WIM:VARIABLES_LOADED()
     --    moved into the live `history` tree by reference right here -- so the
     --    History Viewer is complete instantly even while conversion runs.
     --
-    --  * RESUMABLE. A legacy conversation is removed from WIM_History only
+    --  * RESUMABLE. A legacy conversation is removed from WIM3_History only
     --    AFTER its blob lands in the archive (both happen in the same frame,
     --    so there is no window where it exists in neither). Logging out
-    --    mid-drain leaves the unconverted remainder in WIM_History, which is
+    --    mid-drain leaves the unconverted remainder in WIM3_History, which is
     --    still a declared SavedVariable precisely so that it persists; the
     --    next login re-splices and re-queues it.
     -- ---------------------------------------------------------------------
     historyDrainQueue = {};
     local drainChars = {};
-    for realm, chars in pairs(_G.WIM_History) do
+    for realm, chars in pairs(_G.WIM3_History) do
         if (type(chars) == "table") then
             for character, convos in pairs(chars) do
                 if (type(convos) == "table") then
-                    local archEntry = _G.WIM_HistoryArchive[realm]
-                                      and _G.WIM_HistoryArchive[realm][character];
+                    local archEntry = _G.WIM3_HistoryArchive[realm]
+                                      and _G.WIM3_HistoryArchive[realm][character];
                     local archConvos = archEntry and archEntry.convos;
                     for convo, convoTbl in pairs(convos) do
                         if (type(convoTbl) == "table") then
@@ -1087,7 +1033,7 @@ function WIM:VARIABLES_LOADED()
                 end
             end
             if (next(chars) == nil) then
-                _G.WIM_History[realm] = nil;
+                _G.WIM3_History[realm] = nil;
             end
         end
     end
@@ -1114,11 +1060,11 @@ function WIM:VARIABLES_LOADED()
         local live = history[item.realm] and history[item.realm][item.character];
         local deleted = (not live) or (live[item.convo] ~= item.tbl);
         if (not deleted) then
-        _G.WIM_HistoryArchive[item.realm] = _G.WIM_HistoryArchive[item.realm] or {};
-        local entry = _G.WIM_HistoryArchive[item.realm][item.character];
+        _G.WIM3_HistoryArchive[item.realm] = _G.WIM3_HistoryArchive[item.realm] or {};
+        local entry = _G.WIM3_HistoryArchive[item.realm][item.character];
         if (type(entry) ~= "table" or type(entry.convos) ~= "table") then
             entry = { convos = {} };
-            _G.WIM_HistoryArchive[item.realm][item.character] = entry;
+            _G.WIM3_HistoryArchive[item.realm][item.character] = entry;
         end
         entry.convos[item.convo] = SerializeHistoryTable(item.tbl);
         entry.updated = _G.time();
@@ -1129,13 +1075,13 @@ function WIM:VARIABLES_LOADED()
         end -- not deleted
         -- Safe to forget the legacy copy now (or, in the deleted case, this is
         -- what makes the deletion stick).
-        local lr = _G.WIM_History[item.realm];
+        local lr = _G.WIM3_History[item.realm];
         if (lr and lr[item.character]) then
             lr[item.character][item.convo] = nil;
             if (next(lr[item.character]) == nil) then
                 lr[item.character] = nil;
                 if (next(lr) == nil) then
-                    _G.WIM_History[item.realm] = nil;
+                    _G.WIM3_History[item.realm] = nil;
                 end
             end
         end
@@ -1154,7 +1100,7 @@ function WIM:VARIABLES_LOADED()
     -- call EnsureHistoryCharacterLoaded(realm, character) to jump the queue.
     -- ---------------------------------------------------------------------
     historyLoadQueue = {};
-    for realm, chars in pairs(_G.WIM_HistoryArchive) do
+    for realm, chars in pairs(_G.WIM3_HistoryArchive) do
         if (type(chars) == "table") then
             for character, entry in pairs(chars) do
                 local isActive = (realm == env.realm and character == env.character);
@@ -1211,7 +1157,7 @@ function WIM:VARIABLES_LOADED()
                         -- is in the new format, so only now do we stamp it.
                         -- Logging out part-way through leaves the stamp at its
                         -- old value and the unconverted remainder in
-                        -- WIM_History, and the next login resumes.
+                        -- WIM3_History, and the next login resumes.
                         FinalizeHistorySchema();
                         dPrint("History: background conversion/rehydration complete.");
                         return;
@@ -1230,11 +1176,11 @@ function WIM:VARIABLES_LOADED()
         end);
     end
 
-    -- One-shot informational notice the first time we run after the architecture
-    -- change to per-character storage.
+    -- One-shot informational notice the first time we run after converting
+    -- history to the blob-archive format.
     if (historySchemaAtLogin < HISTORY_SCHEMA) then
         _G.DEFAULT_CHAT_FRAME:AddMessage(
-            "|cff69ccf0[WIM]|r Welcome to WIM 3.18. History is now kept in an "
+            "|cff69ccf0[WIM]|r WIM history is now kept in an "
             .."account-wide archive that stores each conversation as a single "
             .."string, so it can no longer trip Lua's constant-table limit. "
             .."Existing history has been preserved and is being converted in "
