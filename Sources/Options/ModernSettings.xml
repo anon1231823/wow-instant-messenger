@@ -1,0 +1,28 @@
+<Ui xmlns="http://www.blizzard.com/wow/ui/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.blizzard.com/wow/ui/..\FrameXML\UI.xsd">
+
+    <!-- Custom element rows for the native Settings vertical layout.
+         Heights double as the rows' extents in the settings scroll list.
+         The shared mixin (defined in ModernSettings.lua) forwards Init to
+         the per-row data table. -->
+
+    <Frame name="WIM3SettingsColorSwatchTemplate" virtual="true" mixin="WIM3SettingsElementMixin">
+        <Size y="26"/>
+        <Scripts>
+            <OnLoad method="OnLoad"/>
+        </Scripts>
+    </Frame>
+
+    <Frame name="WIM3SettingsPreviewTemplate" virtual="true" mixin="WIM3SettingsElementMixin">
+        <Size y="96"/>
+        <Scripts>
+            <OnLoad method="OnLoad"/>
+        </Scripts>
+    </Frame>
+
+    <Frame name="WIM3SettingsFontBrowserTemplate" virtual="true" mixin="WIM3SettingsElementMixin">
+        <Size y="310"/>
+        <Scripts>
+            <OnLoad method="OnLoad"/>
+        </Scripts>
+    </Frame>
+</Ui>

@@ -38,6 +38,22 @@ local DisabledColor = {.5, .5, .5};
 
 local ObjectStats = {};
 
+-- Push classic-side value changes into the native Settings panel: every
+-- proxy setting re-reads its getter, so a change made here shows up there
+-- immediately (the panel otherwise only re-reads on page display). No-op
+-- when the modern UI is unavailable.
+local function notifyModern()
+    if(options.NotifyModernSettings) then
+        options.NotifyModernSettings();
+    end
+end
+
+-- Verbose option-write trace at debug level 2 (see options.DebugSetting).
+local function debugSetting(key, value)
+    if(options.DebugSetting) then
+        options.DebugSetting("classic", key, value);
+    end
+end
 
 local function statObject(str)
     ObjectStats[str] = ObjectStats[str] or 0;
@@ -103,6 +119,8 @@ local function CreateColorPicker(parent, title, dbTree, varName, valChanged)
                     self:Hide();
                     self:Show();
                     options.frame:Enable();
+                    debugSetting(varName, tostring(r)..", "..tostring(g)..", "..tostring(b));
+                    notifyModern();
                 end
 			_G.ColorPickerFrame.swatchFunc = _G.ColorPickerFrame.func
             _G.ColorPickerFrame.prev = {dbTree[varName].r, dbTree[varName].g, dbTree[varName].b};
@@ -116,6 +134,7 @@ local function CreateColorPicker(parent, title, dbTree, varName, valChanged)
                     self:Hide();
                     self:Show();
                     options.frame:Enable();
+                    notifyModern();
                 end
             _G.ColorPickerFrame:SetFrameStrata("DIALOG");
             _G.ColorPickerFrame:Show();
@@ -174,9 +193,11 @@ local function CreateSlider(parent, title, minText, maxText, min, max, step, dbT
         local newValue = self:GetValue()
         self.valText:SetText(newValue);
         dbTree[varName] = newValue;
+        debugSetting(varName, newValue);
         if(type(valChanged) == "function") then
             valChanged(self, newValue);
         end
+        notifyModern();
     end);
     s:SetScript("OnShow", function(self)
             self:SetValue(tonumber(dbTree[varName]));
@@ -202,8 +223,10 @@ local function CreateDropDownMenu(parent, dbTree, varName, itemList, width)
                     menu.itemList[i].func = function(self, arg1, arg2)
                         self = self or _G.this; -- wotlk/tbc hack
                         dbTree[varName] = self.value;
+                        debugSetting(varName, self.value);
                         DDM.UIDropDownMenu_SetSelectedValue(menu, self.value);
                         func(self, arg1, arg2);
+                        notifyModern();
                     end
                     menu.itemList[i].hooked = true;
                 end
@@ -259,9 +282,11 @@ local function CreateCheckButton(parent, title, dbTree, varName, tooltip, valCha
                 dbTbl = dbTree();
             end
             dbTbl[varName] = self:GetChecked() and true or false;
+            debugSetting(varName, dbTbl[varName]);
             if(type(valChanged) == "function") then
                 valChanged(self, button);
             end
+            notifyModern();
         end);
     cb.Enable = function(self, enabler)
             enabler = _enabler or self;
@@ -335,6 +360,8 @@ local function CreateCheckButtonMenu(parent, title, dbTree, varName, tooltip, va
 
     local function clickFunc(self, ...)
         dbTree2[varName2] = self.value;
+        debugSetting(varName2, self.value);
+        notifyModern();
     end
 
     -- now the menu work...

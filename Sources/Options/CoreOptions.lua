@@ -70,12 +70,6 @@ local function General_Main()
 --    frame.welcome.reset:SetPoint("LEFT", frame.welcome.cb3, "RIGHT", frame.welcome.cb2.text:GetStringWidth()+30, 0);
 --    frame.welcome.lastObj = frame.welcome.cb3;
 
-    -- The 3.16.14 "History Safety" guardrail section used to follow here. The
-    -- blob archive (one serialized string per conversation) made the
-    -- constants ceiling unreachable, so the section -- which also overlapped
-    -- the Welcome section's widgets -- was removed with the guardrail itself
-    -- (2026-08-13). See the matching note in Modules/History.lua.
-
     return frame;
 end
 
@@ -131,6 +125,9 @@ local function General_MessageFormatting()
                 font = libs.SML.MediaTable.font[db.skin.font] or _G["ChatFontNormal"]:GetFont();
             end
             self:SetFont(font, 14, db.skin.font_outline);
+            -- TimeStamps only prints its "[date]" line when the frame's
+            -- lastDate changed; reset it so the redrawn preview keeps it.
+            self.lastDate = nil;
             self:Clear();
             for i=1, #Preview do
                 self:AddMessage(applyStringModifiers(applyMessageFormatting(self, unpack(Preview[i])), self), color.r, color.g, color.b);
@@ -289,6 +286,19 @@ local function createPopRuleFrame(winType)
 
     frame:SetScript("OnShow", function(self)
             if(self.main.alwaysOther:GetChecked()) then
+                -- The flag may have been set from elsewhere (the modern
+                -- options), so pin the state itself here, not only in the
+                -- checkbox's click handler -- otherwise this page keeps
+                -- displaying the previously selected state's rules with the
+                -- tab strip hidden.
+                if(frame.main.selectedState ~= "other") then
+                    frame.main.selectedState = "other";
+                    frame.main.options:Hide();
+                    frame.main.options:Show();
+                    for _,button in pairs(frame.main.tabs.buttons) do
+                        button:SetAlpha(button.state == "other" and 1 or .35);
+                    end
+                end
                 for i=1, #frame.main.tabs.buttons-1 do
                     frame.main.tabs.buttons[i]:Hide();
                 end
@@ -782,7 +792,9 @@ local function General_History(isChat)
         });
     end
     f.sub.maint.nextOffSetY = -10;
-    f.sub.maint:CreateCheckButtonMenu(L["Save a maximum number of messages per person."], historyDB, "maxPer", nil, nil, tsList, db.history, "maxCount");
+    -- historyDB (not db.history) for the count/age values too: the chat
+    -- variant's recorder reads db.history.chat.maxCount / maxAge.
+    f.sub.maint:CreateCheckButtonMenu(L["Save a maximum number of messages per person."], historyDB, "maxPer", nil, nil, tsList, historyDB, "maxCount");
     --f.sub.maint.nextOffSetY = -10;
     local tsList2 = {};
     for i=1, 5 do
@@ -792,7 +804,7 @@ local function General_History(isChat)
             justifyH = "LEFT",
         });
     end
-    f.sub.maint:CreateCheckButtonMenu(L["Automatically delete old messages."], historyDB, "ageLimit", nil, nil, tsList2, db.history, "maxAge");
+    f.sub.maint:CreateCheckButtonMenu(L["Automatically delete old messages."], historyDB, "ageLimit", nil, nil, tsList2, historyDB, "maxAge");
     return f;
 end
 
@@ -882,7 +894,7 @@ local function General_Sounds(isChat)
         f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(_G.RAID), db.sounds.chat, "raid", nil, nil, soundList[5], db.sounds.chat, "raid_sml");
         f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(_G.RAID_LEADER), db.sounds.chat, "raidleader", nil, nil, soundList[6], db.sounds.chat, "raidleader_sml");
         f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(_G.INSTANCE_CHAT), db.sounds.chat, "battleground", nil, nil, soundList[5], db.sounds.chat, "battleground_sml");
-        f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(_G.INSTANCE_CHAT_LEADER), db.sounds.chat, "battlegroundleader", nil, nil, soundList[6], db.sounds.chat, "battleground_sml");
+        f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(_G.INSTANCE_CHAT_LEADER), db.sounds.chat, "battlegroundleader", nil, nil, soundList[6], db.sounds.chat, "battlegroundleader_sml");
         f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(_G.SAY), db.sounds.chat, "say", nil, nil, soundList[7], db.sounds.chat, "say_sml");
         f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(L["World Chat"]), db.sounds.chat, "world", nil, nil, soundList[8], db.sounds.chat, "world_sml");
         f.sub.chat:CreateCheckButtonMenu(L["Play special sound for %s."]:format(L["Custom Chat"]), db.sounds.chat, "custom", nil, nil, soundList[9], db.sounds.chat, "custom_sml");

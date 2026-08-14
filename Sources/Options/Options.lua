@@ -316,8 +316,8 @@ function RegisterOptionFrame(Category, SubCategory, OptionFrame)
     });
 end
 
--- WIM.ShowOptions()
-function ShowOptions()
+-- Toggle the classic standalone options window.
+function ShowClassicOptions()
     if(not options.frame) then
         createOptionsFrame();
     end
@@ -325,6 +325,63 @@ function ShowOptions()
         options.frame:Hide();
     else
         options.frame:Show();
+    end
+end
+
+-- Open WIM's category in the native Settings panel (Options > AddOns).
+-- Only callable when Sources/Options/ModernSettings.lua registered the
+-- category; ShowOptions checks that before routing here.
+function ShowModernOptions()
+    if(options.frame and options.frame:IsShown()) then
+        options.frame:Hide();
+    end
+    if(_G.InCombatLockdown()) then
+        -- Settings.OpenToCategory reaches the protected OpenSettingsPanel(),
+        -- which the client blocks for addon code during combat (the panel
+        -- itself may be open in combat -- only the addon-initiated open is
+        -- protected). Queue the open for end of combat; asking again while
+        -- queued cancels, so a stray click doesn't ambush the user with a
+        -- fullscreen panel after the fight.
+        if(options._pendingModernOpen) then
+            options._pendingModernOpen = nil;
+            _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: queued options open canceled.");
+            return;
+        end
+        options._pendingModernOpen = true;
+        if(not options._modernOpenWaiter) then
+            local waiter = _G.CreateFrame("Frame");
+            options._modernOpenWaiter = waiter;
+            waiter:SetScript("OnEvent", function(self)
+                self:UnregisterEvent("PLAYER_REGEN_ENABLED");
+                -- Re-check both the queue and the routing: a style switch
+                -- back to classic mid-combat voids the queued open.
+                if(options._pendingModernOpen) then
+                    options._pendingModernOpen = nil;
+                    if(db and db.modernOptions) then
+                        _G.Settings.OpenToCategory(options.modernCategoryID);
+                    end
+                end
+            end);
+        end
+        options._modernOpenWaiter:RegisterEvent("PLAYER_REGEN_ENABLED");
+        _G.DEFAULT_CHAT_FRAME:AddMessage(
+            "WIM: the game's Settings panel cannot be opened during combat - it will open when combat ends.");
+        return;
+    end
+    options._pendingModernOpen = nil;
+    _G.Settings.OpenToCategory(options.modernCategoryID);
+end
+
+-- WIM.ShowOptions()
+-- Single entry point used by /wim, the key binding and the minimap menu:
+-- routes to whichever options style the user selected. modernCategoryID
+-- doubles as the "native Settings API available" sentinel, so clients
+-- without it always get the classic window regardless of the flag.
+function ShowOptions()
+    if(db and db.modernOptions and options.modernCategoryID) then
+        ShowModernOptions();
+    else
+        ShowClassicOptions();
     end
 end
 
@@ -337,6 +394,7 @@ RegisterSlashCommand("reset", function()
                     button2 = _G.NO,
                     OnAccept = function()
                         _G.WIM3_Data = nil;
+                        _G.WIM3_Data = nil;   -- pre-rename name
                         _G.ReloadUI();
                     end,
                     timeout = 0,

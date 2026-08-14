@@ -316,7 +316,7 @@ local function createMinimapIcon()
             self:SetFrameStrata(_G.Minimap:GetFrameStrata());
             self:SetParent(_G.Minimap);
             self:SetFrameLevel(8);
-            local angle = math.rad(db.minimap.position or random(0, 360));
+            local angle = math.rad(db.minimap.position or math.random(0, 360));
             local x, y, q = math.cos(angle), math.sin(angle), 1
             if x < 0 then q = q + 1 end
 		    if y > 0 then q = q + 2 end
@@ -461,6 +461,19 @@ local minimapMenu = AddContextMenu(info.text, info);
     info.func = ShowOptions;
     info.notCheckable = true;
     minimapMenu:AddSubItem(AddContextMenu("OPTIONS", info));
+    -- options style toggle. Declared hidden; ModernSettings.lua reveals it
+    -- once the native Settings category exists, so clients without the
+    -- modern Settings API never see it. `checked` is a function, so the
+    -- checkmark is current on every menu open no matter where the flag was
+    -- flipped; clicking closes the menu (SetOptionsStyle confirms in chat),
+    -- which avoids relying on in-place checkmark refreshes.
+    info = {};
+    info.text = L["Use modern options UI"];
+    info.checked = function() return db and db.modernOptions or false; end;
+    info.isNotRadio = true;
+    info.hidden = true;
+    info.func = function() SetOptionsStyle(not db.modernOptions); end;
+    minimapMenu:AddSubItem(AddContextMenu("OPTIONS_STYLE", info));
     -- add space
     info = GetContextMenu("MENU_SPACE") or {};
     info.text = "";
