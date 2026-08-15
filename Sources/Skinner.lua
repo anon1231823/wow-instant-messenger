@@ -295,6 +295,8 @@ function LoadSkin(skinName, immutableDB)
         ApplySkinToWindow(window_objects[i].obj);
     end
 
+    ApplySkinToTabs();
+
 	CallModuleFunction("OnSkinLoaded", SelectedSkin);
 end
 
@@ -464,11 +466,18 @@ function GetSkinTable(skinName)
     return SkinTable[skinName];
 end
 
-function GetRegisteredSkins()
+function GetRegisteredSkins(includeModernOnly)
     -- this function isn't called much so its ok to create a little garbage.
     local list = {};
-    for skin, _ in pairs(SkinTable) do
-        table.insert(list, skin);
+    local selected = GetSelectedSkin().title;
+    for skin, skinTable in pairs(SkinTable) do
+        -- Skins flagged modernOnly appear only when the caller asks for
+        -- them (the modern options UI). Other callers still see such a
+        -- skin while it is the active selection, so their dropdown
+        -- always shows the current state correctly.
+        if(includeModernOnly or not skinTable.modernOnly or skin == selected) then
+            table.insert(list, skin);
+        end
     end
     table.sort(list);
     return list;

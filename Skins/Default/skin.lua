@@ -295,11 +295,11 @@ local WIM_ClassicSkin = {
             {"BOTTOMLEFT", "window", "TOPLEFT", 38, -4},
             {"BOTTOMRIGHT", "window", "TOPRIGHT", -20, -4}
         },
+        -- Tab labels track the font object exactly (size and flags
+        -- included), matching the FontString template they are created
+        -- from; skins may override any of the font properties here.
         text = {
             font = "ChatFontNormal",
-            font_color = {1, 1, 1},
-            font_height = 12,
-            font_flags = ""
         },
         vertical = false,
     },
