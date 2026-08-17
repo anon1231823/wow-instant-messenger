@@ -618,7 +618,11 @@ local function MessageWindow_Frame_OnHide(self)
                 -- save window placement settings.
                 db.winLoc.left = self:SafeGetLeft()*self:GetEffectiveScale();
                 db.winLoc.top = self:SafeGetTop()*self:GetEffectiveScale();
-                options.frame:Enable();
+                -- nil when the demo was opened from the modern options and
+                -- the classic window was never built.
+                if(options.frame) then
+                        options.frame:Enable();
+                end
                 self.demoSave = nil;
                 DestroyWindow(self);
                 WIM.DemoWindow = nil;
@@ -1364,7 +1368,15 @@ local function instantiateWindow(obj)
                         if(widgetObj.enabled and string.match(widgetObj.type, obj.type)) then
                                 widgetObj:Show();
                                 local w, h = widgetObj:GetWidth(), widgetObj:GetHeight();
-                                minWidth = _G.math.max(minWidth, (self:SafeGetLeft() - widgetObj:GetLeft()) + w + (widgetObj:GetRight() - self:SafeGetRight()));
+                                -- A widget's rectangle is nil until its
+                                -- anchor chain resolves (a suppressed pop-up
+                                -- window is created hidden and unpositioned);
+                                -- the window's own side is already
+                                -- Safe-wrapped.
+                                local wLeft, wRight = widgetObj:GetLeft(), widgetObj:GetRight();
+                                if(wLeft and wRight) then
+                                minWidth = _G.math.max(minWidth, (self:SafeGetLeft() - wLeft) + w + (wRight - self:SafeGetRight()));
+                                end
                                 -- Commenting this line out so widgets don't limit the min height.
                                 -- minHeight = _G.math.max(minHeight, (self:SafeGetTop() - widgetObj:GetTop() - WindowParent:GetBottom()) + h + (widgetObj:GetBottom() - self:SafeGetBottom() - WindowParent:GetBottom()));
                         else
@@ -1698,14 +1710,16 @@ function DestroyWindow(playerNameOrObject)
 end
 
 function ShowDemoWindow()
+        -- Callable from either options UI: the classic window is only
+        -- involved (disabled while placing) when it is actually shown.
         if(options.frame and options.frame:IsShown()) then
                 options.frame:Disable();
-                if(not WIM.DemoWindow) then
-                        WIM.DemoWindow = createWindow(L["Demo Window"], "demo");
-                end
-                WIM.DemoWindow:Show();
-                WIM.DemoWindow.demoSave = true;
         end
+        if(not WIM.DemoWindow) then
+                WIM.DemoWindow = createWindow(L["Demo Window"], "demo");
+        end
+        WIM.DemoWindow:Show();
+        WIM.DemoWindow.demoSave = true;
 end
 
 
@@ -1991,6 +2005,13 @@ RegisterWidgetTrigger("close", "whisper,chat,w2w,demo", "OnClick", function(self
 	end);
 
 RegisterWidgetTrigger("close", "whisper,chat,w2w", "OnUpdate", function(self)
+                -- Themed windows swap their corner art through the
+                -- modifier watcher in Skinner.lua. This hover swap would
+                -- repaint the classic art files over it every frame.
+                if(self.parentWindow and self.parentWindow.wimChrome
+                        and self.parentWindow.wimChrome:IsShown()) then
+                        return;
+                end
                 local SelectedSkin = WIM:GetSelectedSkin();
 		if(GetMouseFocus() == self) then
 			if(IsShiftKeyDown() and self.curTextureIndex == 1) then
@@ -2102,6 +2123,14 @@ end
 
 local myself = _G.UnitName("player")
 RegisterWidgetTrigger("chat_display", "whisper,chat,w2w", "OnHyperlinkClick", function(self, link, text, button)
+	-- Blizzard's chat frames announce every hyperlink click on the
+	-- event registry BEFORE SetItemRef, and the player context menu is
+	-- opened by a listener on that event -- SetItemRef alone no longer
+	-- produces it.
+	if(_G.EventRegistry and _G.EventRegistry.TriggerEvent) then
+		_G.EventRegistry:TriggerEvent("ChatFrame.OnHyperlinkClick", self, link, text, button);
+	end
+
 	local t,n,i = string.split(":", link)
 	local winType = self:GetParent().type
 
@@ -2169,8 +2198,10 @@ RegisterWidgetTrigger("chat_display", "whisper,chat,w2w", "OnHyperlinkClick", fu
 
 	end
 
-	-- pass all other clicks to SetItemRef
-	_G.SetItemRef(link, text, button);
+	-- Pass all other clicks to SetItemRef. The frame argument matters:
+	-- the player context menu anchors to the clicked chat frame and
+	-- silently refuses to open without one.
+	_G.SetItemRef(link, text, button, self);
 end);
 --RegisterWidgetTrigger("chat_display", "whisper,chat,w2w","OnMessageScrollChanged", function(self) updateScrollBars(self:GetParent()); end);
 

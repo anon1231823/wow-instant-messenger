@@ -673,10 +673,16 @@ local function createFilterFrame()
                 win.filter.enabled = true;
                 win.filter.stats = 0;
                 table.insert(filters, 1, win.filter);
+                -- The classic lists exist only once the classic window has
+                -- been built; the editor also serves the modern options.
                 if(win.isChat) then
-                    options.frame.chatFilterList.selected = 1;
+                    if(options.frame and options.frame.chatFilterList) then
+                        options.frame.chatFilterList.selected = 1;
+                    end
                 else
-                    options.frame.filterList.selected = 1;
+                    if(options.frame and options.frame.filterList) then
+                        options.frame.filterList.selected = 1;
+                    end
                 end
             end
             win:Hide();
@@ -700,13 +706,16 @@ local function createFilterFrame()
             _G.PlaySound(851);
             if(options.frame) then
                 options.frame:Enable();
+                local list = self.isChat and options.frame.chatFilterList
+                             or options.frame.filterList;
+                if(list) then
+                    list:Hide();
+                    list:Show();
+                end
             end
-            if(self.isChat) then
-                options.frame.chatFilterList:Hide();
-                options.frame.chatFilterList:Show();
-            else
-                options.frame.filterList:Hide();
-                options.frame.filterList:Show();
+            -- Keep the modern filter lists in step too.
+            if(options.NotifyModernSettings) then
+                options.NotifyModernSettings();
             end
         end);
 
@@ -722,10 +731,6 @@ end
 
 
 function ShowFilterFrame(filter, index, isChat)
-    if(not options.frame or not (options.frame.filterList or options.frame.chatFilterList)) then
-        -- no reason for this frame to be called when options window has not been loaded.
-        return;
-    end
     if(not filterFrame) then
         filterFrame = createFilterFrame();
     end

@@ -11,6 +11,17 @@ local unpack = unpack;
 local setmetatable = setmetatable;
 local getmetatable = getmetatable;
 local rawget = rawget;
+local CreateFrame = CreateFrame;
+local pcall = pcall;
+
+-- Defined before the setfenv. C_Texture.GetAtlasInfo looks up
+-- Vector2DMixin in the calling function's environment, so namespaced
+-- code must not call it directly.
+local function getAtlasInfo(name)
+    if (C_Texture and C_Texture.GetAtlasInfo) then
+        return C_Texture.GetAtlasInfo(name);
+    end
+end
 
 -- set namespace
 setfenv(1, WIM);
@@ -21,6 +32,156 @@ db_defaults.skin = {
     font_outline = "",
     suggest = true,
 };
+
+-- Modern Theme: backgrounds and cut-out behavior for the surfaces
+-- modern-only skins dress in the game's own panel art (the History
+-- Viewer's chrome and the message windows).
+db_defaults.modernTheme = {
+    frame = "rock",
+    panels = "darkmarble",
+    content = "darkmarble",
+    cutout = false,
+    chatFrame = "rock",
+    chatPanel = "darkmarble",
+    chatCutout = false,
+};
+
+-- The panel art offered by the Modern Theme background pickers: the
+-- game's own backgrounds, plus flat translucent fills.
+local CHROME_BACKGROUNDS = {
+    { key = "none", label = "None (fully clear)", color = {0, 0, 0, 0} },
+    { key = "transparent", label = "Transparent", color = {0, 0, 0, .55} },
+    { key = "rock", label = "Rock",
+      file = "Interface\\FrameGeneral\\UI-Background-Rock", tile = true },
+    { key = "marble", label = "Marble",
+      file = "Interface\\FrameGeneral\\UI-Background-Marble", tile = true },
+    { key = "darkmarble", label = "Dark Marble",
+      file = "Interface\\FrameGeneral\\UI-Background-Marble", tile = true, tint = .45 },
+    { key = "dialog", label = "Dialog",
+      file = "Interface\\DialogFrame\\UI-DialogBox-Background", tile = true },
+    { key = "bank", label = "Bank",
+      file = "Interface\\BankFrame\\Bank-Background", tile = true },
+    { key = "vault", label = "Guild Vault",
+      file = "Interface\\GuildBankFrame\\GuildVaultBG", tile = true },
+    { key = "sandstone", label = "Dark Sandstone",
+      file = "Interface\\HELPFRAME\\DarkSandstone-Tile", tile = true },
+    { key = "parchmenttile", label = "Parchment (Tileable)",
+      file = "Interface\\HELPFRAME\\Tileable-Parchment", tile = true },
+    { key = "question", label = "Quest Parchment",
+      file = "Interface\\QuestionFrame\\question-background", tile = true },
+    { key = "raidgroup", label = "Raid Frame",
+      file = "Interface\\RAIDFRAME\\UI-RaidFrame-GroupBg", tile = false },
+    { key = "endscreen", label = "Destiny",
+      file = "Interface\\Destiny\\EndscreenBG", tile = false },
+    { key = "stationeryauction", label = "Stationery (Auction)",
+      file = "Interface\\Stationery\\AuctionStationery1", tile = false },
+    { key = "stationeryill", label = "Stationery (Illustrated)",
+      file = "Interface\\Stationery\\Stationery_ill1", tile = false },
+    { key = "stationeryog", label = "Stationery (Orgrimmar)",
+      file = "Interface\\Stationery\\Stationery_OG1", tile = false },
+    { key = "stationerytb", label = "Stationery (Thunder Bluff)",
+      file = "Interface\\Stationery\\Stationery_TB1", tile = false },
+    { key = "stationeryuc", label = "Stationery (Undercity)",
+      file = "Interface\\Stationery\\Stationery_UC1", tile = false },
+    { key = "stationeryplain", label = "Stationery (Plain)",
+      file = "Interface\\Stationery\\StationeryTest1", tile = false },
+    { key = "worldmap1", label = "World Map 1",
+      file = "Interface\\WorldMap\\UI-WorldMap-Middle1", tile = false },
+    { key = "worldmap2", label = "World Map 2",
+      file = "Interface\\WorldMap\\UI-WorldMap-Middle2", tile = false },
+    { key = "achievement", label = "Achievement Stats",
+      file = "Interface\\ACHIEVEMENTFRAME\\UI-Achievement-StatsBackground", tile = false },
+    { key = "adventuremap", label = "Adventure Map Parchment",
+      file = "Interface\\AdventureMap\\AdventureMapParchmentTile", tile = true },
+    { key = "collections", label = "Collections",
+      file = "Interface\\Collections\\CollectionsBackgroundTile", tile = true },
+    { key = "framealliance", label = "Frame: Alliance",
+      file = "Interface\\FrameGeneral\\UIFrameAllianceBackground", tile = true },
+    { key = "framehorde", label = "Frame: Horde",
+      file = "Interface\\FrameGeneral\\UIFrameHordeBackground", tile = true },
+    { key = "frameneutral", label = "Frame: Neutral",
+      file = "Interface\\FrameGeneral\\UIFrameNeutralBackground", tile = true },
+    { key = "framemarine", label = "Frame: Marine",
+      file = "Interface\\FrameGeneral\\UIFrameMarineBackground", tile = true },
+    { key = "framemechagon", label = "Frame: Mechagon",
+      file = "Interface\\FrameGeneral\\UIFrameMechagonBackground", tile = true },
+    { key = "framekyrian", label = "Frame: Kyrian",
+      file = "Interface\\FrameGeneral\\UIFrameKyrianBackground", tile = true },
+    { key = "framenecrolord", label = "Frame: Necrolord",
+      file = "Interface\\FrameGeneral\\UIFrameNecrolordBackground", tile = true },
+    { key = "framenightfae", label = "Frame: Night Fae",
+      file = "Interface\\FrameGeneral\\UIFrameNightFaeBackground", tile = true },
+    { key = "frameventhyr", label = "Frame: Venthyr",
+      file = "Interface\\FrameGeneral\\UIFrameVenthyrBackground", tile = true },
+    { key = "frameoribos", label = "Frame: Oribos",
+      file = "Interface\\FrameGeneral\\UIFrameOribosBackground", tile = true },
+    { key = "framedragonflight", label = "Frame: Dragonflight",
+      file = "Interface\\FrameGeneral\\UIFrameDragonflightBackground", tile = true },
+    { key = "framewarwithin", label = "Frame: The War Within",
+      file = "Interface\\FrameGeneral\\UIFrameTheWarWithinBackground", tile = true },
+    { key = "classhall", label = "Class Hall",
+      file = "Interface\\Garrison\\ClassHallBackground", tile = true },
+    { key = "classhallinternal", label = "Class Hall (Internal)",
+      file = "Interface\\Garrison\\ClassHallInternalBackground", tile = true },
+    { key = "garrisonlanding", label = "Garrison Landing Page",
+      file = "Interface\\Garrison\\GarrisonLandingPageMiddleTile", tile = true },
+    { key = "garrisonmission", label = "Garrison Mission",
+      file = "Interface\\Garrison\\GarrisonMissionUIInfoBoxBackgroundTile", tile = true },
+    { key = "garrisonship", label = "Ship Mission Parchment",
+      file = "Interface\\Garrison\\GarrisonShipMissionParchment", tile = true },
+    { key = "garrisonui", label = "Garrison UI",
+      file = "Interface\\Garrison\\GarrisonUIBackground", tile = true },
+    { key = "garrisonui2", label = "Garrison UI 2",
+      file = "Interface\\Garrison\\GarrisonUIBackground2", tile = true },
+    { key = "creditsclassic", label = "Credits: Classic",
+      file = "Interface\\Credits\\CreditsScreenBackground0WoW", tile = true },
+    { key = "creditsbc", label = "Credits: Burning Crusade",
+      file = "Interface\\Credits\\CreditsScreenBackground1BC", tile = true },
+    { key = "creditswotlk", label = "Credits: Wrath",
+      file = "Interface\\Credits\\CreditsScreenBackground2WotLK", tile = true },
+    { key = "creditscata", label = "Credits: Cataclysm",
+      file = "Interface\\Credits\\CreditsScreenBackground3Cataclysm", tile = true },
+    { key = "creditsmop", label = "Credits: Mists of Pandaria",
+      file = "Interface\\Credits\\CreditsScreenBackground4MoP", tile = true },
+    { key = "creditswod", label = "Credits: Warlords",
+      file = "Interface\\Credits\\CreditsScreenBackground5WoD", tile = true },
+    { key = "creditslegion", label = "Credits: Legion",
+      file = "Interface\\Credits\\CreditsScreenBackground6Legion", tile = true },
+    { key = "creditsbfa", label = "Credits: Battle for Azeroth",
+      file = "Interface\\Credits\\CreditsScreenBackground7BfA", tile = true },
+};
+
+function GetChromeBackgrounds()
+    return CHROME_BACKGROUNDS;
+end
+
+-- Paints one catalog choice onto a texture. Unknown keys fall back
+-- to Rock, never to the flat fills.
+function ApplyChromeBackgroundChoice(texture, key)
+    local entry, fallback;
+    for i=1, #CHROME_BACKGROUNDS do
+        if(CHROME_BACKGROUNDS[i].key == key) then
+            entry = CHROME_BACKGROUNDS[i];
+            break;
+        end
+        if(CHROME_BACKGROUNDS[i].key == "rock") then
+            fallback = CHROME_BACKGROUNDS[i];
+        end
+    end
+    entry = entry or fallback or CHROME_BACKGROUNDS[1];
+    if(entry.color) then
+        texture:SetColorTexture(entry.color[1], entry.color[2],
+            entry.color[3], entry.color[4]);
+        return;
+    end
+    local tile = entry.tile and true or false;
+    texture:SetTexture(entry.file, tile, tile);
+    texture:SetHorizTile(tile);
+    texture:SetVertTile(tile);
+    texture:SetTexCoord(0, 1, 0, 1);
+    local tint = entry.tint or 1;
+    texture:SetVertexColor(tint, tint, tint, 1);
+end
 
 local SelectedSkin;
 
@@ -224,6 +385,480 @@ function ApplySkinToWindow(obj)
     obj:UpdateProps();
     obj:UpdateIcon();
     obj:UpdateCharDetails();
+
+    -- Runs last so nothing above it (UpdateIcon re-showing the class
+    -- icon, property refreshes) undoes the theme's visibility choices.
+    ApplyModernThemeToWindow(obj);
+end
+
+-- Modern Theme on the message windows: while a modern-only skin is
+-- selected, each window wears the History Viewer's construction in
+-- miniature -- the standard metal nine-slice frame with a title band
+-- (the conversation name in gold), the message area as a recessed
+-- inset well whose fill follows the theme's message-area choice, the
+-- input box in the native search-box border, and the standard red
+-- corner X. Cut-out mode draws the frame fill only around the message
+-- well, so a clear well background looks through to the world.
+local function buildWindowChrome(obj)
+    local apply = _G.NineSliceUtil and _G.NineSliceUtil.ApplyLayoutByName;
+    if(not apply) then return false; end
+    local display = obj.widgets.chat_display;
+    local msg_box = obj.widgets.msg_box;
+
+    local chrome = CreateFrame("Frame", nil, obj);
+    chrome:SetAllPoints();
+    chrome:SetFrameLevel(obj:GetFrameLevel());
+
+    -- Apply the layout first. The portrait variant's left pieces sit
+    -- 13px outside the frame, 5px further than the plain layout's, which
+    -- puts the left rail at about -1..+4. The fill's left inset must
+    -- follow the applied layout or a gap opens against the rail.
+    chrome.hasPortrait = pcall(apply, chrome, "PortraitFrameTemplate")
+        or pcall(apply, chrome, "ButtonFrameTemplate");
+    if(not chrome.hasPortrait) then
+        if(not pcall(apply, chrome, "ButtonFrameTemplateNoPortrait")) then
+            chrome:Hide();
+            return false;
+        end
+    end
+    local bgLeft = chrome.hasPortrait and 2 or 7;
+
+    -- Otherwise the fill matches the History Viewer: native panel
+    -- insets at top and bottom, and it runs under the asymmetric right
+    -- rail to the frame edge.
+    chrome.bg = chrome:CreateTexture(nil, "BACKGROUND", nil, -8);
+    chrome.bg:SetPoint("TOPLEFT", bgLeft, -18);
+    chrome.bg:SetPoint("BOTTOMRIGHT", 0, 3);
+
+    -- Cut-out strips: the fill drawn only around the message well.
+    local function strip()
+        local tex = chrome:CreateTexture(nil, "BACKGROUND", nil, -8);
+        tex:Hide();
+        return tex;
+    end
+    local stripTop = strip();
+    stripTop:SetPoint("TOPLEFT", chrome, "TOPLEFT", bgLeft, -18);
+    stripTop:SetPoint("RIGHT", chrome, "RIGHT", 0, 0);
+    stripTop:SetPoint("BOTTOM", display, "TOP", 0, 6);
+    local stripBottom = strip();
+    stripBottom:SetPoint("BOTTOMLEFT", chrome, "BOTTOMLEFT", bgLeft, 3);
+    stripBottom:SetPoint("RIGHT", chrome, "RIGHT", 0, 0);
+    stripBottom:SetPoint("TOP", display, "BOTTOM", 0, -6);
+    local stripLeft = strip();
+    stripLeft:SetPoint("LEFT", chrome, "LEFT", bgLeft, 0);
+    stripLeft:SetPoint("RIGHT", display, "LEFT", -6, 0);
+    stripLeft:SetPoint("TOP", display, "TOP", 0, 6);
+    stripLeft:SetPoint("BOTTOM", display, "BOTTOM", 0, -6);
+    local stripRight = strip();
+    stripRight:SetPoint("RIGHT", chrome, "RIGHT", 0, 0);
+    stripRight:SetPoint("LEFT", display, "RIGHT", 24, 0);
+    stripRight:SetPoint("TOP", display, "TOP", 0, 6);
+    stripRight:SetPoint("BOTTOM", display, "BOTTOM", 0, -6);
+    chrome.strips = { stripTop, stripBottom, stripLeft, stripRight };
+
+    -- Message well: a recessed inset around the display area. The well
+    -- extends 24px past the display on the right. The theme pulls the
+    -- display's right edge in by 18px; the well keeps its original
+    -- footprint, and the scrollbar sits in the freed gutter.
+    local well = CreateFrame("Frame", nil, obj);
+    well:SetPoint("TOPLEFT", display, "TOPLEFT", -6, 6);
+    well:SetPoint("BOTTOMRIGHT", display, "BOTTOMRIGHT", 24, -6);
+    well:SetFrameLevel(obj:GetFrameLevel());
+    well.bg = well:CreateTexture(nil, "BACKGROUND", nil, -7);
+    well.bg:SetPoint("TOPLEFT", 2, -2);
+    well.bg:SetPoint("BOTTOMRIGHT", -2, 2);
+    chrome.well = well;
+
+    -- Input border: the native search box's end caps and middle piece
+    -- around the message box.
+    if(msg_box) then
+        local input = CreateFrame("Frame", nil, obj);
+        input:SetPoint("TOPLEFT", msg_box, "TOPLEFT", 0, 0);
+        input:SetPoint("BOTTOMRIGHT", msg_box, "BOTTOMRIGHT", 0, 0);
+        input:SetFrameLevel(obj:GetFrameLevel());
+        local left = input:CreateTexture(nil, "BACKGROUND");
+        left:SetAtlas("common-search-border-left");
+        left:SetSize(8, 20);
+        left:SetPoint("LEFT", -5, 0);
+        local right = input:CreateTexture(nil, "BACKGROUND");
+        right:SetAtlas("common-search-border-right");
+        right:SetSize(8, 20);
+        right:SetPoint("RIGHT", 0, 0);
+        local middle = input:CreateTexture(nil, "BACKGROUND");
+        middle:SetAtlas("common-search-border-middle");
+        middle:SetPoint("TOPLEFT", left, "TOPRIGHT");
+        middle:SetPoint("BOTTOMRIGHT", right, "BOTTOMLEFT");
+        chrome.input = input;
+    end
+
+    if(not pcall(apply, well, "InsetFrameTemplate")) then
+        chrome:Hide();
+        well:Hide();
+        if(chrome.input) then chrome.input:Hide(); end
+        return false;
+    end
+
+    -- Minimal scrollbar inside the message well, in the gutter that the
+    -- display's pulled-in right edge leaves free. This matches the
+    -- History Viewer. The window's scroll buttons act as its steppers.
+    if(display.GetMaxScrollRange and display.GetScrollOffset) then
+        local bar = CreateFrame("Slider", nil, obj);
+        bar:SetOrientation("VERTICAL");
+        bar:SetWidth(16);
+        bar:SetFrameLevel(obj:GetFrameLevel() + 2);
+        bar:SetPoint("TOPRIGHT", display, "TOPRIGHT", 18, -19);
+        bar:SetPoint("BOTTOMRIGHT", display, "BOTTOMRIGHT", 18, 19);
+        bar:SetMinMaxValues(0, 0);
+        bar:SetValueStep(1);
+        bar:SetValue(0);
+        local thumb = bar:CreateTexture(nil, "OVERLAY");
+        bar:SetThumbTexture(thumb);
+        thumb:SetAlpha(0);
+        local capTop = bar:CreateTexture(nil, "ARTWORK");
+        capTop:SetAtlas("minimal-scrollbar-small-thumb-top", true);
+        capTop:SetPoint("TOP", thumb, "TOP");
+        local capBottom = bar:CreateTexture(nil, "ARTWORK");
+        capBottom:SetAtlas("minimal-scrollbar-small-thumb-bottom", true);
+        capBottom:SetPoint("BOTTOM", thumb, "BOTTOM");
+        local body = bar:CreateTexture(nil, "ARTWORK");
+        body:SetAtlas("minimal-scrollbar-small-thumb-middle");
+        body:SetPoint("TOPLEFT", capTop, "BOTTOMLEFT");
+        body:SetPoint("BOTTOMRIGHT", capBottom, "TOPRIGHT");
+        local trackTop = bar:CreateTexture(nil, "BACKGROUND");
+        trackTop:SetAtlas("minimal-scrollbar-track-top", true);
+        trackTop:SetPoint("TOP");
+        local trackBottom = bar:CreateTexture(nil, "BACKGROUND");
+        trackBottom:SetAtlas("minimal-scrollbar-track-bottom", true);
+        trackBottom:SetPoint("BOTTOM");
+        local trackMiddle = bar:CreateTexture(nil, "BACKGROUND");
+        trackMiddle:SetAtlas("!minimal-scrollbar-track-middle");
+        trackMiddle:SetPoint("TOPLEFT", trackTop, "BOTTOMLEFT");
+        trackMiddle:SetPoint("BOTTOMRIGHT", trackBottom, "TOPRIGHT");
+        -- Size the thumb after the track has settled. A thumb almost as
+        -- long as the track leaves almost no drag travel.
+        local function sizeThumb()
+            local info = getAtlasInfo("minimal-scrollbar-small-thumb-middle");
+            local trackHeight = bar:GetHeight() or 0;
+            local thumbHeight = 56;
+            if(trackHeight > 0) then
+                local cap = _G.math.floor(trackHeight * 0.6);
+                if(cap < 20) then cap = 20; end
+                if(thumbHeight > cap) then thumbHeight = cap; end
+            end
+            thumb:SetSize(8, thumbHeight);
+            if(info and info.height and info.height > 0) then
+                local extent = (thumbHeight - 16) / info.height;
+                if(extent > 1) then extent = 1; end
+                body:SetTexCoord(0, 1, 0, extent);
+            end
+        end
+        bar:HookScript("OnSizeChanged", sizeThumb);
+        sizeThumb();
+        bar.wimMaxRange = 0;
+        bar:SetScript("OnValueChanged", function(self, value)
+            if(self.wimSyncing) then return; end
+            display:SetScrollOffset(self.wimMaxRange - _G.math.floor(value + 0.5));
+        end);
+        bar.wimElapsed = 1;
+        bar:SetScript("OnUpdate", function(self, elapsed)
+            self.wimElapsed = self.wimElapsed + elapsed;
+            if(self.wimElapsed < 0.1) then return; end
+            self.wimElapsed = 0;
+            local maxRange = display:GetMaxScrollRange();
+            self.wimSyncing = true;
+            if(maxRange ~= self.wimMaxRange) then
+                self.wimMaxRange = maxRange;
+                self:SetMinMaxValues(0, maxRange);
+            end
+            self:SetValue(maxRange - display:GetScrollOffset());
+            self.wimSyncing = false;
+        end);
+        bar:Hide();
+        chrome.scrollBar = bar;
+    end
+
+    -- The fade logic keeps a window solid only while the mouse-focus
+    -- frame is the window or is tagged with it. The slider receives
+    -- mouse input, so every chrome piece carries the tag.
+    chrome.parentWindow = obj;
+    well.parentWindow = obj;
+    if(chrome.input) then chrome.input.parentWindow = obj; end
+    if(chrome.scrollBar) then chrome.scrollBar.parentWindow = obj; end
+
+    obj.wimChrome = chrome;
+    return true;
+end
+
+-- Steppers use the minimal arrow atlases, 16px wide to align with the
+-- 8px tube. SetTexCoord applies within an atlas member, so the
+-- coordinates are reset on every state change.
+local function styleWindowStepper(button, up)
+    local prefix = up and "minimal-scrollbar-arrow-top"
+                   or "minimal-scrollbar-arrow-bottom";
+    local states = {
+        button:GetNormalTexture(), button:GetPushedTexture(),
+        button:GetDisabledTexture(), button:GetHighlightTexture(),
+    };
+    local atlases = { prefix, prefix.."-down", prefix, prefix.."-over" };
+    for i=1, #states do
+        if(states[i]) then
+            states[i]:SetAtlas(atlases[i]);
+            states[i]:SetTexCoord(0, 1, 0, 1);
+        end
+    end
+    local highlight = button:GetHighlightTexture();
+    if(highlight) then highlight:SetBlendMode("BLEND"); end
+    button:SetSize(16, 11);
+end
+
+-- The class-icon cells contain transparent padding, which makes the
+-- emblem look small inside the portrait ring. Zoom the current cell's
+-- texture coordinates inward so the emblem fills the circle. This runs
+-- after every UpdateIcon (which resets the cell), so repeated runs are
+-- safe.
+function ZoomPortraitIcon(obj)
+    local icon = obj.widgets and obj.widgets.class_icon;
+    if(not icon) then return; end
+    local ulx, uly, _, lly, urx = icon:GetTexCoord();
+    local left, right, top, bottom = ulx, urx, uly, lly;
+    local w, h = right - left, bottom - top;
+    if(w <= 0 or h <= 0) then return; end
+    -- Measured from the class-icon sheet: the emblem occupies only the
+    -- middle ~58% of its cell (a ~20% transparent inset each side).
+    local ix, iy = w * 0.19, h * 0.19;
+    icon:SetTexCoord(left + ix, right - ix, top + iy, bottom - iy);
+end
+
+-- The themed close button shows the minimize glyph at rest (click
+-- hides the window) and swaps to the X while SHIFT is held, because
+-- SHIFT-click closes the conversation. The art always shows what the
+-- click will do. curTextureIndex 2 is the always-close state.
+function UpdateThemedCloseArt(obj)
+    local close = obj.widgets and obj.widgets.close;
+    if(not (close and close.GetNormalTexture)) then return; end
+    local closes = _G.IsShiftKeyDown() or close.curTextureIndex == 2;
+    local normalAtlas = closes and "RedButton-Exit" or "redbutton-condense";
+    local pushedAtlas = closes and "RedButton-exit-pressed" or "redbutton-condense-pressed";
+    local normal = close:GetNormalTexture();
+    if(normal) then
+        normal:SetAtlas(normalAtlas);
+        normal:SetTexCoord(0, 1, 0, 1);
+    end
+    local pushed = close:GetPushedTexture();
+    if(pushed) then
+        pushed:SetAtlas(pushedAtlas);
+        pushed:SetTexCoord(0, 1, 0, 1);
+    end
+    local highlight = close:GetHighlightTexture();
+    if(highlight) then
+        highlight:SetAtlas("RedButton-Highlight");
+        highlight:SetTexCoord(0, 1, 0, 1);
+        highlight:SetBlendMode("ADD");
+    end
+    close:SetSize(24, 24);
+    close:ClearAllPoints();
+    close:SetPoint("TOPRIGHT", obj, "TOPRIGHT", 1, 0);
+end
+
+-- Live art swap while SHIFT is pressed or released over themed windows.
+local shiftWatcher = CreateFrame("Frame");
+shiftWatcher:RegisterEvent("MODIFIER_STATE_CHANGED");
+shiftWatcher:SetScript("OnEvent", function(_, _, key)
+    if(key ~= "LSHIFT" and key ~= "RSHIFT") then return; end
+    local windowList = WindowSoupBowl.windows;
+    for i=1, #windowList do
+        local win = windowList[i].obj;
+        if(win and win.wimChrome and win.wimChrome:IsShown()) then
+            UpdateThemedCloseArt(win);
+        end
+    end
+end);
+
+function ApplyModernThemeToWindow(obj)
+    local theme = db and db.modernTheme;
+    local skin = GetSelectedSkin();
+    local active = (theme and skin and skin.modernOnly) and true or false;
+    local widgets = obj.widgets;
+    local bd = widgets and widgets.Backdrop;
+    if(not (bd and bd.bg and widgets.chat_display)) then return; end
+
+    if(active and not obj.wimChrome and not obj.wimChromeFailed) then
+        obj.wimChromeFailed = not buildWindowChrome(obj);
+    end
+    local chrome = active and obj.wimChrome or nil;
+
+    -- The skin's own backdrop pieces hide while the chrome is shown.
+    -- They return when the chrome goes: ApplySkinToWindow reapplies
+    -- their art on each pass before this code runs.
+    local skinShown = (chrome == nil);
+    bd.tl:SetShown(skinShown); bd.tr:SetShown(skinShown);
+    bd.bl:SetShown(skinShown); bd.br:SetShown(skinShown);
+    bd.t:SetShown(skinShown); bd.b:SetShown(skinShown);
+    bd.l:SetShown(skinShown); bd.r:SetShown(skinShown);
+    bd.bg:SetShown(skinShown);
+    -- Themed windows show the class icon only as the circled portrait
+    -- (below); without the portrait layout the icon would poke outside
+    -- the window's top-left over the chrome (a live dump measured it
+    -- 10px past the edge).
+    if(widgets.class_icon) then
+        local hasPortrait = obj.wimChrome and obj.wimChrome.hasPortrait;
+        widgets.class_icon:SetShown(skinShown or (chrome ~= nil and hasPortrait and true or false));
+        if(skinShown and obj.wimPortraitMasked) then
+            widgets.class_icon:RemoveMaskTexture(obj.wimPortraitMask);
+            obj.wimPortraitMasked = nil;
+        end
+    end
+
+    if(obj.wimChrome) then
+        obj.wimChrome:SetShown(chrome ~= nil);
+        obj.wimChrome.well:SetShown(chrome ~= nil);
+        if(obj.wimChrome.input) then
+            obj.wimChrome.input:SetShown(chrome ~= nil);
+        end
+        if(obj.wimChrome.scrollBar) then
+            obj.wimChrome.scrollBar:SetShown(chrome ~= nil);
+        end
+    end
+    if(not chrome) then
+        if(obj.wimBackdropLevel) then
+            bd.bg:GetParent():SetFrameLevel(obj.wimBackdropLevel);
+        end
+        return;
+    end
+
+    -- The class icon, name, and details live on the Backdrop host
+    -- frame, which shares a level with the chrome and would draw under
+    -- its rock fill. Raise it while themed; the classic path above
+    -- restores it.
+    local backdropHost = bd.bg:GetParent();
+    if(obj.wimBackdropLevel == nil) then
+        obj.wimBackdropLevel = backdropHost:GetFrameLevel();
+    end
+    backdropHost:SetFrameLevel(obj:GetFrameLevel() + 2);
+
+    -- The display's right edge pulls in for the in-well scrollbar (the
+    -- skin re-lays the widget each pass, so this reapplies cleanly).
+    local display = widgets.chat_display;
+    local displayPoints = {};
+    for i=1, display:GetNumPoints() do
+        displayPoints[i] = { display:GetPoint(i) };
+    end
+    display:ClearAllPoints();
+    for i=1, #displayPoints do
+        local p = displayPoints[i];
+        local x = p[4] or 0;
+        if(string.find(p[1], "RIGHT")) then x = x - 18; end
+        display:SetPoint(p[1], p[2], p[3], x, p[5]);
+    end
+    if(chrome.scrollBar) then
+        local up, down = widgets.scroll_up, widgets.scroll_down;
+        if(up and down) then
+            styleWindowStepper(up, true);
+            styleWindowStepper(down, false);
+            up:ClearAllPoints();
+            up:SetPoint("BOTTOM", chrome.scrollBar, "TOP", 0, 8);
+            down:ClearAllPoints();
+            down:SetPoint("TOP", chrome.scrollBar, "BOTTOM", 0, -8);
+        end
+    end
+
+    -- The right-side column: the history shortcut at the top, the
+    -- shortcut buttons stacked beneath it, all centered on one axis
+    -- level with the message well's top. The shortcut container needs
+    -- an explicit size; without one it collapses to zero width (its
+    -- buttons span its edges) and the icons disappear.
+    local history = widgets.history;
+    local columnAnchor = chrome.well;
+    if(history) then
+        history:ClearAllPoints();
+        history:SetPoint("TOP", chrome.well, "TOPRIGHT", 15, 0);
+        columnAnchor = history;
+    end
+    if(widgets.shortcuts) then
+        widgets.shortcuts:SetSize(22, 150);
+        widgets.shortcuts:ClearAllPoints();
+        if(columnAnchor == history) then
+            widgets.shortcuts:SetPoint("TOP", history, "BOTTOM", 0, -4);
+        else
+            widgets.shortcuts:SetPoint("TOP", chrome.well, "TOPRIGHT", 15, 0);
+        end
+    end
+
+    -- The class icon becomes the circled portrait in the carved
+    -- corner, like the community icon on the Guild & Communities
+    -- panel. The ring's opening is 49px across, centered at
+    -- (26, -25.5) in window coordinates (measured from the corner
+    -- piece's pixels). The icon draws slightly larger so it meets the
+    -- ring's inner lip, and its texture cell zooms in past the cell's
+    -- transparent padding so the emblem fills the circle.
+    if(widgets.class_icon and chrome.hasPortrait) then
+        local icon = widgets.class_icon;
+        icon:ClearAllPoints();
+        -- The ring's gold band has an inner diameter of about 53px,
+        -- centered at (25.5, -22) in window coordinates (measured from
+        -- the opaque runs along the corner piece's center row and
+        -- column). The icon slightly overlaps the lip's anti-aliasing.
+        icon:SetPoint("CENTER", obj, "TOPLEFT", 25.5, -22);
+        icon:SetSize(56, 56);
+        if(not obj.wimPortraitMask) then
+            local mask = icon:GetParent():CreateMaskTexture();
+            -- CircleMaskScalable's circle reaches the mask's edges
+            -- (the portrait alpha-mask file bakes in padding that
+            -- shrank the visible circle short of the ring). The atlas
+            -- spans its whole file, so the file id is used directly:
+            -- mask textures reliably accept SetTexture, while SetAtlas
+            -- support on them is doubtful.
+            mask:SetTexture(3605349,
+                "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE");
+            mask:SetAllPoints(icon);
+            obj.wimPortraitMask = mask;
+        end
+        if(not obj.wimPortraitMasked) then
+            icon:AddMaskTexture(obj.wimPortraitMask);
+            obj.wimPortraitMasked = true;
+        end
+        ZoomPortraitIcon(obj);
+        if(not obj.wimUpdateIconWrapped) then
+            obj.wimUpdateIconWrapped = true;
+            local origUpdateIcon = obj.UpdateIcon;
+            obj.UpdateIcon = function(self, ...)
+                origUpdateIcon(self, ...);
+                if(self.wimChrome and self.wimChrome:IsShown()
+                        and self.wimChrome.hasPortrait) then
+                    ZoomPortraitIcon(self);
+                end
+            end;
+        end
+    end
+
+
+    local cutout = theme.chatCutout and true or false;
+    chrome.bg:SetShown(not cutout);
+    if(not cutout) then
+        ApplyChromeBackgroundChoice(chrome.bg, theme.chatFrame);
+    end
+    for i=1, #chrome.strips do
+        chrome.strips[i]:SetShown(cutout);
+        if(cutout) then
+            ApplyChromeBackgroundChoice(chrome.strips[i], theme.chatFrame);
+        end
+    end
+    ApplyChromeBackgroundChoice(chrome.well.bg, theme.chatPanel);
+
+    -- Title band: the conversation name centered in gold, as the
+    -- History Viewer titles its band.
+    local from = widgets.from;
+    if(from) then
+        local fontPath = _G.GameFontNormal:GetFont();
+        from:SetFont(fontPath, 12, "");
+        from:SetTextColor(_G.GameFontNormal:GetTextColor());
+        from:ClearAllPoints();
+        from:SetPoint("CENTER", obj, "TOP", 0, -11.5);
+    end
+
+    -- The corner button: minimize glyph at rest, the X while SHIFT
+    -- is held (see UpdateThemedCloseArt).
+    UpdateThemedCloseArt(obj);
 end
 
 local function deleteStyleFileEntries(theTable)
@@ -242,6 +877,15 @@ end
 
 function GetSelectedSkin()
     return SelectedSkin or SkinTable["WIM Classic"];
+end
+
+-- Only the modern options UI offers modern-only skins. While one is
+-- selected, the options style must not switch back to classic, because
+-- the classic window could never offer the skin again. Code that
+-- changes the style checks this function.
+function SkinLocksOptionsStyle()
+    local skin = GetSelectedSkin();
+    return (skin and skin.modernOnly) and true or false;
 end
 
 -- A skin's `title` doubles as its identity: RegisterSkin stores skins as
@@ -298,6 +942,13 @@ function LoadSkin(skinName, immutableDB)
     ApplySkinToTabs();
 
 	CallModuleFunction("OnSkinLoaded", SelectedSkin);
+
+    -- A modern-only skin requires the modern options UI (see
+    -- SkinLocksOptionsStyle). Selecting one turns that UI on.
+    if(SelectedSkin and SelectedSkin.modernOnly and db and not db.modernOptions
+            and SetOptionsStyle) then
+        SetOptionsStyle(true);
+    end
 end
 
 function RegisterFont(objName, title)

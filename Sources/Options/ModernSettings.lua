@@ -119,6 +119,29 @@ function _G.WIM3SettingsElementMixin:Init(initializer)
     end
 end
 function _G.WIM3SettingsElementMixin:Release()
+    if (self.wimHolder) then
+        self.wimHolder:Hide();
+    end
+end
+
+-- Attach a persistent holder to a pooled element row. Rows sharing a
+-- template share a frame POOL: when a row scrolls out its frame is
+-- released with the old holder still parented, and if that frame is
+-- reused for a DIFFERENT row of the same template, two holders end up
+-- SetAllPoints on one frame -- rendered exactly on top of each other.
+-- Evicting any previous holder before attaching prevents that.
+function options.AttachRowHolder(row, holder)
+    local previous = row.wimHolder;
+    if (previous and previous ~= holder) then
+        previous:Hide();
+        previous:ClearAllPoints();
+        previous:SetParent(nil);
+    end
+    row.wimHolder = holder;
+    holder:SetParent(row);
+    holder:ClearAllPoints();
+    holder:SetAllPoints(row);
+    holder:Show();
 end
 
 -- The reverse direction: a modern setter re-shows the classic window's
@@ -268,6 +291,123 @@ function ui.Dropdown(category, name, default, items, dbTree, varName, tooltip, v
     return { setting = setting, init = init };
 end
 
+-- Root-page extras: the bug-report callout and the credits. Both are
+-- custom element rows with persistent holders reparented on display,
+-- like every other custom row.
+local BUG_REPORT_URL = "https://github.com/Legacy-of-Sylvanaar/wow-instant-messenger/issues";
+
+local bugReportHolder;
+local function bugReportRowInit(row)
+    if (not bugReportHolder) then
+        local holder = CreateFrame("Frame");
+        holder:Hide();
+        -- Rounded tooltip-style panel with a gold border, so the callout
+        -- stands apart from the plain settings rows around it.
+        local panel = CreateFrame("Frame", nil, holder, "BackdropTemplate");
+        panel:SetPoint("TOPLEFT", 37, -4);
+        panel:SetPoint("BOTTOMRIGHT", -37, 4);
+        panel:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        });
+        panel:SetBackdropColor(0.07, 0.07, 0.09, 0.92);
+        panel:SetBackdropBorderColor(1, 0.82, 0.2);
+
+        local icon = panel:CreateTexture(nil, "ARTWORK");
+        icon:SetSize(34, 34);
+        icon:SetPoint("TOPLEFT", 12, -12);
+        icon:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew");
+
+        local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge");
+        title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, -2);
+        title:SetText(L["Found a bug?"]);
+
+        local body = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
+        body:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -4);
+        body:SetPoint("RIGHT", -12, 0);
+        body:SetJustifyH("LEFT");
+        body:SetText(L["Reports are welcome! Click below and follow the instructions in the bug report template."]);
+
+        -- WoW cannot open a browser or write to the clipboard. The
+        -- button opens the standard copy dialog with the URL
+        -- pre-selected.
+        local link = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate");
+        link:SetSize(180, 24);
+        link:SetPoint("BOTTOM", 0, 10);
+        link:SetText(L["Visit us on GitHub"]);
+        link:SetScript("OnClick", function()
+            _G.StaticPopupDialogs["WIM_BUGREPORT_URL"] = {
+                preferredIndex = _G.STATICPOPUP_NUMDIALOGS,
+                text = L["Press Ctrl+C to copy the link, then open it in your browser."],
+                button1 = _G.CLOSE,
+                hasEditBox = 1,
+                editBoxWidth = 330,
+                OnShow = function(self)
+                    self.editBox:SetText(BUG_REPORT_URL);
+                    self.editBox:HighlightText();
+                    self.editBox:SetFocus();
+                end,
+                EditBoxOnTextChanged = function(self)
+                    if (self:GetText() ~= BUG_REPORT_URL) then
+                        self:SetText(BUG_REPORT_URL);
+                        self:HighlightText();
+                    end
+                end,
+                EditBoxOnEscapePressed = function(self) self:GetParent():Hide(); end,
+                EditBoxOnEnterPressed = function(self) self:GetParent():Hide(); end,
+                timeout = 0,
+                whileDead = 1,
+                hideOnEscape = 1,
+            };
+            _G.StaticPopup_Show("WIM_BUGREPORT_URL");
+        end);
+        link:SetScript("OnEnter", function(self)
+            _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+            _G.GameTooltip:SetText(BUG_REPORT_URL, nil, nil, nil, nil, true);
+            _G.GameTooltip:AddLine(L["Click to copy the link."], 1, 1, 1);
+            _G.GameTooltip:Show();
+        end);
+        link:SetScript("OnLeave", function()
+            _G.GameTooltip:Hide();
+        end);
+
+        bugReportHolder = holder;
+    end
+    options.AttachRowHolder(row, bugReportHolder);
+end
+
+local creditsHolder;
+local function creditsRowInit(row)
+    if (not creditsHolder) then
+        local holder = CreateFrame("Frame");
+        holder:Hide();
+        local creditsText = options.creditsText or {};
+
+        local created = holder:CreateFontString(nil, "OVERLAY", "GameFontNormal");
+        created:SetPoint("TOPLEFT", 37, -6);
+        created:SetText("|cff69ccf0"..L["Created By:"].."|r");
+        local createdText = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
+        createdText:SetPoint("TOPLEFT", created, "BOTTOMLEFT", 0, -4);
+        createdText:SetPoint("RIGHT", -37, 0);
+        createdText:SetJustifyH("LEFT");
+        createdText:SetText(creditsText[1] or "");
+
+        local thanks = holder:CreateFontString(nil, "OVERLAY", "GameFontNormal");
+        thanks:SetPoint("TOPLEFT", createdText, "BOTTOMLEFT", 0, -8);
+        thanks:SetText("|cff69ccf0"..L["Special Thanks:"].."|r");
+        local thanksText = holder:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
+        thanksText:SetPoint("TOPLEFT", thanks, "BOTTOMLEFT", 0, -4);
+        thanksText:SetPoint("RIGHT", -37, 0);
+        thanksText:SetJustifyH("LEFT");
+        thanksText:SetText(creditsText[2] or "");
+
+        creditsHolder = holder;
+    end
+    options.AttachRowHolder(row, creditsHolder);
+end
+
 local function registerCategory()
     local category, layout = Settings.RegisterVerticalLayoutCategory("WIM");
     options.modernCategory = category;
@@ -279,20 +419,46 @@ local function registerCategory()
         L["Use modern options UI"], Settings.Default.False,
         function() return db.modernOptions == true; end,
         function(value)
-            db.modernOptions = value and true or false;
+            value = value and true or false;
+            if (not value and SkinLocksOptionsStyle()) then
+                return;
+            end
+            db.modernOptions = value;
             options.DebugSetting("modern", "modernOptions", db.modernOptions);
         end);
-    Settings.CreateCheckbox(category, styleSetting,
-        L["When enabled, WIM's Options entry points (minimap menu, key binding, /wim) open this panel instead of the classic WIM options window."]);
+    local styleInitializer = Settings.CreateCheckbox(category, styleSetting,
+        L["When enabled, WIM's Options entry points (minimap menu, key binding, /wim) open this panel instead of the classic WIM options window."]
+        .."\n\n"..L["While a modern-only skin (such as WIM Modern) is selected, this option is enforced: those skins are configured through this panel only."]);
+    -- Greyed out while a modern-only skin is selected. Those skins are
+    -- offered only here, so the classic window must not take over.
+    if (styleInitializer and styleInitializer.AddModifyPredicate) then
+        styleInitializer:AddModifyPredicate(function()
+            return not SkinLocksOptionsStyle();
+        end);
+    end
     table.insert(allSettings, styleSetting);
 
     -- The classic window stays reachable from here in either mode.
     if (_G.CreateSettingsButtonInitializer and layout) then
-        layout:AddInitializer(_G.CreateSettingsButtonInitializer(
+        local classicButton = _G.CreateSettingsButtonInitializer(
             L["Classic Options"], L["Open"],
             function() ShowClassicOptions(); end,
-            L["Open the classic WIM options window."], true));
+            L["Open the classic WIM options window."]
+            .."\n\n"..L["Disabled while a modern-only skin (such as WIM Modern) is selected: those skins carry settings the classic window has no controls for."], true);
+        -- Greyed out while a modern-only skin enforces the modern UI.
+        if (classicButton.AddModifyPredicate) then
+            classicButton:AddModifyPredicate(function()
+                return not SkinLocksOptionsStyle();
+            end);
+        end
+        layout:AddInitializer(classicButton);
     end
+
+    -- Bug-report callout and credits on the root page.
+    ui.Header(layout, L["Report a Bug"]);
+    ui.Custom(layout, "WIM3SettingsBugReportTemplate", { onInit = bugReportRowInit });
+    ui.Header(layout, L["Credits"]);
+    ui.Custom(layout, "WIM3SettingsCreditsTemplate", { onInit = creditsRowInit });
 
     -- Build the option pages (Sources/Options/ModernOptions.lua).
     for i = 1, #pageBuilders do
@@ -301,11 +467,13 @@ local function registerCategory()
 
     Settings.RegisterAddOnCategory(category);
 
-    -- The minimap menu's style toggle is declared hidden and only revealed
-    -- once the category actually exists (see Modules/MinimapIcon.lua).
+    -- The minimap menu's style toggle is declared hidden and appears
+    -- only once the category exists (see Modules/MinimapIcon.lua). It
+    -- hides again while a modern-only skin is active, because the modern
+    -- options UI is then required.
     local menuItem = GetContextMenu("OPTIONS_STYLE");
     if (menuItem) then
-        menuItem.hidden = nil;
+        menuItem.hidden = function() return SkinLocksOptionsStyle(); end;
     end
 
     dPrint("Modern Settings category registered (id "..tostring(options.modernCategoryID)..").");
@@ -335,6 +503,12 @@ end);
 -- reopened.
 function SetOptionsStyle(enabled)
     enabled = enabled and true or false;
+    if (not enabled and SkinLocksOptionsStyle()) then
+        _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: the selected skin ("
+            ..(db.skin and db.skin.selected or "")..") requires the modern"
+            .." options UI; switch to another skin first.");
+        return;
+    end
     if (styleSetting) then
         styleSetting:SetValue(enabled);
     else

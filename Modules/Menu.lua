@@ -5,6 +5,15 @@ local CreateFrame = CreateFrame;
 local table = table;
 local string = string;
 
+-- Defined before the setfenv. C_Texture.GetAtlasInfo looks up
+-- Vector2DMixin in the calling function's environment, so namespaced
+-- code must not call it directly.
+local function getAtlasInfo(name)
+    if (C_Texture and C_Texture.GetAtlasInfo) then
+        return C_Texture.GetAtlasInfo(name);
+    end
+end
+
 --set namespace
 setfenv(1, WIM);
 
@@ -93,6 +102,50 @@ local function createButton(parent)
 
 	button.ApplySkin = function(self, skin)
 		SetWidgetFont(self.text, skin.menu.button);
+		-- Native context-menu rows are bare text over the panel with
+		-- only the hover wash; the plate pieces and button fill stay
+		-- for skins without the context style.
+		local native = (skin.menu.style == "context");
+		if(self.Left) then self.Left:SetShown(not native); end
+		if(self.Middle) then self.Middle:SetShown(not native); end
+		if(self.Right) then self.Right:SetShown(not native); end
+		-- Native rows hover with the gold end-fading wash the Settings
+		-- category list draws on its selected row: gold, fading at both
+		-- ends. The classic quest-log art has no gold and fades on one
+		-- side only, cutting hard at the other. The classic look keeps
+		-- that art with its blue additive tint.
+		local highlight = self:GetHighlightTexture();
+		if(highlight) then
+			if(native and getAtlasInfo("Options_List_Active")) then
+				highlight:SetAtlas("Options_List_Active");
+				highlight:SetTexCoord(0, 1, 0, 1);
+				highlight:SetVertexColor(1, 1, 1);
+				highlight:SetBlendMode("BLEND");
+				-- The status and close icons hang off the button's
+				-- right edge; the wash covers the whole visual row.
+				highlight:ClearAllPoints();
+				highlight:SetPoint("TOPLEFT", self, "TOPLEFT", 0, 0);
+				highlight:SetPoint("BOTTOMLEFT", self, "BOTTOMLEFT", 0, 0);
+				highlight:SetPoint("RIGHT", self.close, "RIGHT", 2, 0);
+			else
+				highlight:SetTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight");
+				highlight:SetTexCoord(0, 1, 0, 1);
+				highlight:SetVertexColor(.196, .388, .8);
+				highlight:SetBlendMode("ADD");
+				highlight:ClearAllPoints();
+				highlight:SetAllPoints(self);
+			end
+		end
+		-- Status blips follow the friends list's icons in the native
+		-- look (see OnUpdate).
+		self.wimNativeStatus = native;
+		local alpha = native and 0 or 1;
+		local normal = self:GetNormalTexture();
+		if(normal) then normal:SetAlpha(alpha); end
+		local pushed = self:GetPushedTexture();
+		if(pushed) then pushed:SetAlpha(alpha); end
+		local disabled = self:GetDisabledTexture();
+		if(disabled) then disabled:SetAlpha(alpha); end
 	end
 
     button:SetScript("OnClick", function(self, b)
@@ -105,17 +158,35 @@ local function createButton(parent)
         end);
     button:SetScript("OnUpdate", function(self, elapsed)
             if(self.win) then
+                -- The native look uses the friends list's status icons;
+                -- the classic look keeps WIM's blips. WIM only tracks
+                -- online/offline for whisper targets, so away/busy have
+                -- no source here; non-whisper rows go iconless when
+                -- native (a channel has no presence).
+                local native = self.wimNativeStatus;
                 if(self.win.online ~= nil and not self.win.online and self.win.type == "whisper") then
                     self.text:SetTextColor(.5, .5, .5);
-                    self.status:SetTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\blipRed");
+                    self.status:SetTexture(native
+                        and "Interface\\FriendsFrame\\StatusIcon-Offline"
+                        or "Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\blipRed");
                     self.canFade = true;
                 elseif(self.win.unreadCount and self.win.unreadCount > 0) then
                     self.text:SetTextColor(1, 1, 1);
-                    self.status:SetTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\blipBlue");
+                    self.status:SetTexture(native
+                        and "Interface\\FriendsFrame\\StatusIcon-Online"
+                        or "Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\blipBlue");
                     self.canFade = false;
                 else
                     self.text:SetTextColor(1, 1, 1);
-                    self.status:SetTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\blipClear");
+                    if(native) then
+                        if(self.win.type == "whisper") then
+                            self.status:SetTexture("Interface\\FriendsFrame\\StatusIcon-Online");
+                        else
+                            self.status:SetTexture(nil);
+                        end
+                    else
+                        self.status:SetTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\blipClear");
+                    end
                     self.canFade = true;
                 end
                 -- set opacity of button text.
@@ -190,22 +261,97 @@ local function createGroup(title, list, maxButtons, showNone)
 
 	group.ApplySkin = function(self, skin)
 
-		-- set backdrop - changes for Patch 9.0.1 - Shadowlands, retail and classic
-    	self.backdropInfo = {
-			bgFile = skin.menu.background,
-        	edgeFile = skin.menu.edge,
-        	tile = skin.menu.tile,
-			tileSize = skin.menu.tile_size,
-			edgeSize = skin.menu.edge_size,
-        	insets = {
-				left = skin.menu.insets.left,
-				right = skin.menu.insets.right,
-				top = skin.menu.insets.top,
-				bottom = skin.menu.insets.bottom
-			}
-		};
+		-- A skin may dress the menu in the game's own context-menu
+		-- panel (skin.menu.background_atlas, the chamfered-corner art
+		-- current right-click menus draw), rendered as a single sliced
+		-- texture; the backdrop pair below is the fallback for skins
+		-- without it and clients without slicing or the atlas.
+		-- One stretched texture, exactly as the game's menu compositor
+		-- dresses its menus (from a live dump of an OPEN native menu):
+		-- the art is drawn as a single piece over the whole frame --
+		-- the chamfer scales with the menu -- extended 10px past the
+		-- frame horizontally and 3px vertically (the baked shadow
+		-- pad), at 0.93 alpha.
+		local atlas = skin.menu.background_atlas;
+		if(atlas and getAtlasInfo(atlas) and not self.wimAtlasBg) then
+			local bg = self:CreateTexture(nil, "BACKGROUND");
+			bg:SetPoint("TOPLEFT", -10, 3);
+			bg:SetPoint("BOTTOMRIGHT", 10, -3);
+			bg:Hide();
+			self.wimAtlasBg = bg;
+		end
+		if(atlas and self.wimAtlasBg) then
+			self.wimAtlasBg:SetAtlas(atlas);
+			self.wimAtlasBg:SetTexCoord(0, 1, 0, 1);
+			self.wimAtlasBg:SetAlpha(0.93);
+			self.wimAtlasBg:Show();
+			-- Retire the template backdrop. ClearBackdrop runs first,
+			-- while backdropInfo is still set (it is a no-op once the
+			-- field is nil) -- but live dumps showed this client's
+			-- mixin leaving the pieces shown regardless, so they are
+			-- also hidden directly by parentKey; the fallback path's
+			-- ApplyBackdrop re-shows them for skins without the atlas.
+			if(self.ClearBackdrop) then
+				self:ClearBackdrop();
+			else
+				self:SetBackdrop(nil);
+			end
+			self.backdropInfo = nil;
+			local backdropPieces = { "TopLeftCorner", "TopRightCorner",
+				"BottomLeftCorner", "BottomRightCorner", "TopEdge",
+				"BottomEdge", "LeftEdge", "RightEdge", "Center" };
+			for i=1, #backdropPieces do
+				local piece = self[backdropPieces[i]];
+				if(piece and piece.Hide) then
+					piece:Hide();
+				end
+			end
+			-- Native menus carry no strip behind their section titles;
+			-- their headers read left-aligned gold (the unit menu's
+			-- "Loot Options" style), with the standard divider above
+			-- sections after the first.
+			self.title.bg:Hide();
+			self.title.text:SetJustifyH("LEFT");
+			if(self.wimWantsDivider and not self.wimDivider) then
+				local divider = self:CreateTexture(nil, "ARTWORK");
+				-- The divider native menus draw between sections
+				-- (file id from a live dump of an open menu).
+				divider:SetTexture(918860);
+				divider:SetHeight(13);
+				divider:SetPoint("BOTTOMLEFT", self.title, "TOPLEFT", -6, 2);
+				divider:SetPoint("BOTTOMRIGHT", self.title, "TOPRIGHT", 6, 2);
+				self.wimDivider = divider;
+			end
+			if(self.wimDivider) then
+				self.wimDivider:Show();
+			end
+			dPrint("Menu: chamfered atlas background applied to "..(self:GetName() or "group")..".");
+		else
+			if(self.wimAtlasBg) then
+				self.wimAtlasBg:Hide();
+			end
+			-- set backdrop - changes for Patch 9.0.1 - Shadowlands, retail and classic
+			self.backdropInfo = {
+				bgFile = skin.menu.background,
+				edgeFile = skin.menu.edge,
+				tile = skin.menu.tile,
+				tileSize = skin.menu.tile_size,
+				edgeSize = skin.menu.edge_size,
+				insets = {
+					left = skin.menu.insets.left,
+					right = skin.menu.insets.right,
+					top = skin.menu.insets.top,
+					bottom = skin.menu.insets.bottom
+				}
+			};
 
-		self:ApplyBackdrop();
+			self:ApplyBackdrop();
+			self.title.bg:Show();
+			self.title.text:SetJustifyH("RIGHT");
+			if(self.wimDivider) then
+				self.wimDivider:Hide();
+			end
+		end
 
 		-- title font + color. SetWidgetFont resolves every form a skin may
 		-- declare (font object name, LibSharedMedia name, or file path); a
@@ -282,6 +428,9 @@ local function createMenu()
     menu.groups[2] = createGroup(L["Chat"], lists.chat, maxButtons.chat, false);
     menu.groups[2]:SetPoint("TOPLEFT", menu.groups[1], "BOTTOMLEFT", 0, 25);
     menu.groups[2]:SetPoint("TOPRIGHT", menu.groups[1], "BOTTOMRIGHT", 0, 25);
+    -- Sections after the first show the native divider above their
+    -- header while the context style is active.
+    menu.groups[2].wimWantsDivider = true;
 
     menu.Refresh = function(self)
             local groupHeight = 0;
@@ -357,7 +506,17 @@ end
 function Menu:OnEnable()
     if(not WIM.Menu) then
         WIM.Menu = createMenu();
-        WIM.Menu:Refresh();
+        -- Enable runs from this file's main chunk, before any skin has
+        -- registered. In that case the construction-time backdrop stays
+        -- until the login LoadSkin dispatches OnSkinLoaded. If the menu
+        -- is created later than that, apply the active skin now;
+        -- ApplySkin ends with a Refresh.
+        local skin = GetSelectedSkin();
+        if(skin) then
+            WIM.Menu:ApplySkin(skin);
+        else
+            WIM.Menu:Refresh();
+        end
     end
 end
 

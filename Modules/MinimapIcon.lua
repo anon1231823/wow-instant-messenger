@@ -112,7 +112,10 @@ local function toggleMenu(parent)
     if(Menu:IsShown()) then
         Menu:Hide();
     else
-        Menu:SetPoint("TOPRIGHT", parent, "BOTTOMLEFT", 20, 20);
+        -- Grow toward the screen center, whichever quadrant the
+        -- button sits in.
+        local point, relPoint = GetMenuGrowthAnchor(parent);
+        Menu:SetPoint(point, parent, relPoint);
         Menu:Show();
     end
 end

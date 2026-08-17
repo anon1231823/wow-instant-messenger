@@ -318,6 +318,19 @@ end
 
 -- Toggle the classic standalone options window.
 function ShowClassicOptions()
+    -- Modern-only skins carry settings the classic window has no
+    -- controls for, so while one is selected the classic window stays
+    -- closed (the same lock that pins the options style to modern).
+    if(SkinLocksOptionsStyle and SkinLocksOptionsStyle()) then
+        _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: the selected skin ("
+            ..(db and db.skin and db.skin.selected or "")..") is configured"
+            .." through the modern options UI; the classic window is"
+            .." unavailable while it is active.");
+        if(ShowModernOptions) then
+            ShowModernOptions();
+        end
+        return;
+    end
     if(not options.frame) then
         createOptionsFrame();
     end

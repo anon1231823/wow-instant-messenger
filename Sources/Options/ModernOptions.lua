@@ -338,10 +338,7 @@ local function previewRowInit(row)
         prev:SetJustifyH("LEFT");
         previewHolder.prev = prev;
     end
-    previewHolder:SetParent(row);
-    previewHolder:ClearAllPoints();
-    previewHolder:SetAllPoints(row);
-    previewHolder:Show();
+    options.AttachRowHolder(row, previewHolder);
     refreshPreview();
 end
 
@@ -492,10 +489,7 @@ local function fontBrowserRowInit(row)
     if (not browserHolder) then
         browserHolder = buildFontBrowser();
     end
-    browserHolder:SetParent(row);
-    browserHolder:ClearAllPoints();
-    browserHolder:SetAllPoints(row);
-    browserHolder:Show();
+    options.AttachRowHolder(row, browserHolder);
     browserHolder:RefreshList();
     -- Second pass on the next frame. The list sizes the row after Init,
     -- and a font file used for the first time this session may not
@@ -508,6 +502,378 @@ local function fontBrowserRowInit(row)
             end
         end);
     end
+end
+
+-- Filter list row (whisper and chat variants). One persistent holder
+-- per variant, reparented into its pooled element row on display, like
+-- the font browser. The classic modal editor (Modules/Filters.lua) is
+-- shared; its OnHide broadcasts NotifyModernSettings, so these lists
+-- follow saves from either UI.
+local FILTER_ROW_HEIGHT = 32;
+local FILTER_VISIBLE_ROWS = 6;
+local filterHolders = {};
+
+local function makeFilterHolder(isChat)
+    local holder = CreateFrame("Frame");
+    holder:Hide();
+    local function ftab()
+        return isChat and chatFilters or filters;
+    end
+    local filterTypes = {L["Pattern"], L["User Type"], L["User Level"]};
+    local filterActions = {L["Allow"], L["Ignore"], L["Block"]};
+
+    local border = CreateFrame("Frame", nil, holder);
+    border:SetPoint("TOPLEFT", ROW_LABEL_X, -4);
+    border:SetPoint("BOTTOMRIGHT", -37, 34);
+    options.AddFramedBackdrop(border);
+
+    local ok, scroll = pcall(CreateFrame, "ScrollFrame", nil, border, "ScrollFrameTemplate");
+    if (not ok or not scroll) then
+        scroll = CreateFrame("ScrollFrame", "WIM3_ModernFilterScroll"..(isChat and "Chat" or "Whisper"),
+            border, "UIPanelScrollFrameTemplate");
+    end
+    scroll:SetPoint("TOPLEFT", 4, -4);
+    scroll:SetPoint("BOTTOMRIGHT", -24, 4);
+    local content = CreateFrame("Frame", nil, scroll);
+    content:SetSize(540, 1);
+    scroll:SetScrollChild(content);
+    scroll:SetScript("OnSizeChanged", function(self, w)
+        if (w and w > 0) then
+            content:SetWidth(w);
+        end
+    end);
+
+    local rows = {};
+    local function ensureRow(index)
+        local row = rows[index];
+        if (row) then
+            return row;
+        end
+        row = CreateFrame("Button", nil, content);
+        row:SetHeight(FILTER_ROW_HEIGHT);
+        row:SetPoint("TOPLEFT", 0, -(index - 1) * FILTER_ROW_HEIGHT);
+        row:SetPoint("RIGHT", content, "RIGHT", 0, 0);
+        row:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD");
+
+        row.cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate");
+        row.cb:SetPoint("TOPLEFT");
+        row.cb:SetScale(.75);
+        row.cb:SetScript("OnClick", function(self)
+            row.filter.enabled = self:GetChecked() and true or false;
+            options.DebugSetting("modern", "filter."..(row.filter.name or "?")..".enabled",
+                row.filter.enabled);
+            holder:RefreshList();
+        end);
+
+        row.title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal");
+        row.title:SetPoint("TOPLEFT", 28, -3);
+        row.title:SetPoint("RIGHT", -40, 0);
+        row.title:SetJustifyH("LEFT");
+        row.action = row:CreateFontString(nil, "OVERLAY", "ChatFontSmall");
+        row.action:SetPoint("TOPLEFT", row.title, "BOTTOMLEFT", 0, -1);
+        row.stats = row:CreateFontString(nil, "OVERLAY", "ChatFontSmall");
+        row.stats:SetPoint("TOPLEFT", row.action, "TOPRIGHT");
+        row.stats:SetPoint("RIGHT", -40, 0);
+        row.stats:SetJustifyH("RIGHT");
+
+        row.down = CreateFrame("Button", nil, row);
+        row.down:SetSize(14, 14);
+        row.down:SetPoint("TOPRIGHT", -2, -2);
+        row.down:SetNormalTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\down");
+        row.down:SetHighlightTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\down", "ADD");
+        row.down:SetScript("OnClick", function()
+            local index = row.index;
+            local list = ftab();
+            list[index], list[index+1] = list[index+1], list[index];
+            if (holder.selected == index) then holder.selected = index + 1; end
+            holder:RefreshList();
+        end);
+        row.up = CreateFrame("Button", nil, row);
+        row.up:SetSize(14, 14);
+        row.up:SetPoint("RIGHT", row.down, "LEFT", -5, 0);
+        row.up:SetNormalTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\up");
+        row.up:SetHighlightTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\up", "ADD");
+        row.up:SetScript("OnClick", function()
+            local index = row.index;
+            local list = ftab();
+            list[index], list[index-1] = list[index-1], list[index];
+            if (holder.selected == index) then holder.selected = index - 1; end
+            holder:RefreshList();
+        end);
+
+        row:SetScript("OnClick", function()
+            _G.PlaySound(856);
+            holder.selected = row.index;
+            holder:RefreshList();
+        end);
+        rows[index] = row;
+        return row;
+    end
+
+    holder.add = CreateFrame("Button", nil, holder, "UIPanelButtonTemplate");
+    holder.add:SetSize(110, 24);
+    holder.add:SetPoint("TOPLEFT", border, "BOTTOMLEFT", 0, -4);
+    holder.add:SetText(L["Add Filter"]);
+    holder.add:SetScript("OnClick", function()
+        ShowFilterFrame(nil, nil, isChat);
+    end);
+    holder.edit = CreateFrame("Button", nil, holder, "UIPanelButtonTemplate");
+    holder.edit:SetSize(110, 24);
+    holder.edit:SetPoint("LEFT", holder.add, "RIGHT", 4, 0);
+    holder.edit:SetText(L["Edit Filter"]);
+    holder.edit:SetScript("OnClick", function()
+        if (holder.selected) then
+            ShowFilterFrame(ftab()[holder.selected], holder.selected, isChat);
+        end
+    end);
+    holder.delete = CreateFrame("Button", nil, holder, "UIPanelButtonTemplate");
+    holder.delete:SetSize(110, 24);
+    holder.delete:SetPoint("TOPRIGHT", border, "BOTTOMRIGHT", 0, -4);
+    holder.delete:SetText(L["Delete Filter"]);
+    holder.delete:SetScript("OnClick", function()
+        local list = ftab();
+        if (not holder.selected or not list[holder.selected]) then
+            return;
+        end
+        table.remove(list, holder.selected);
+        if (holder.selected == 1) then
+            holder.selected = (#list > 0) and 1 or nil;
+        else
+            holder.selected = holder.selected - 1;
+        end
+        holder:RefreshList();
+        if (options.RefreshClassicPages) then
+            options.RefreshClassicPages();
+        end
+    end);
+
+    holder.RefreshList = function()
+        local list = ftab();
+        local w = scroll:GetWidth();
+        if (w and w > 0) then
+            content:SetWidth(w);
+        end
+        content:SetHeight(#list * FILTER_ROW_HEIGHT);
+        for i = 1, #list do
+            local row = ensureRow(i);
+            local filter = list[i];
+            row.index = i;
+            row.filter = filter;
+            local alpha = filter.enabled and 1 or .65;
+            row.cb:SetChecked(filter.enabled);
+            row.title:SetText((filter.name or "").."|cffffffff - "
+                ..(filterTypes[filter.type] or "?")
+                ..(filter.protected and " ("..L["Protected"]..")" or "").."|r");
+            row.title:SetAlpha(alpha);
+            row.action:SetText(L["Action:"].." "..(filterActions[filter.action] or "?"));
+            row.action:SetAlpha(alpha);
+            row.stats:SetText(L["Occurrences:"].." "..(filter.stats or "0"));
+            row.stats:SetAlpha(alpha);
+            if (i == 1) then row.up:Hide(); else row.up:Show(); end
+            if (i == #list) then row.down:Hide(); else row.down:Show(); end
+            if (holder.selected == i) then
+                row:LockHighlight();
+            else
+                row:UnlockHighlight();
+            end
+            row:Show();
+        end
+        for i = #list + 1, #rows do
+            rows[i]:Hide();
+        end
+        holder.edit:SetEnabled(holder.selected ~= nil);
+        holder.delete:SetEnabled(holder.selected ~= nil
+            and list[holder.selected] ~= nil
+            and not list[holder.selected].protected);
+    end
+
+    options.RegisterModernRefresh(function()
+        if (holder:IsVisible()) then
+            holder:RefreshList();
+        end
+    end);
+    return holder;
+end
+
+local function filterRowInit(row, data)
+    local key = data.isChat and "chat" or "whisper";
+    if (not filterHolders[key]) then
+        filterHolders[key] = makeFilterHolder(data.isChat);
+    end
+    local holder = filterHolders[key];
+    options.AttachRowHolder(row, holder);
+    holder:RefreshList();
+end
+
+-- Channel list row (world, custom, community). Same persistent-holder
+-- pattern. Each row carries the six per-channel toggles with native
+-- tooltips instead of the classic page's shared help line.
+local CHANNEL_ROW_HEIGHT = 64;
+local channelHolders = {};
+
+local channelToggles = {
+    { key = "monitor",       label = L["Monitor"],             help = L["Have WIM monitor this channel."] },
+    { key = "neverPop",      label = L["Never Pop"],           help = L["Never have this window pop-up on my screen."] },
+    { key = "neverSuppress", label = L["Never Suppress"],      help = L["Never suppress messages from the default chat frame."] },
+    { key = "showAlerts",    label = L["Minimap Alerts"],      help = L["Show unread message alert on minimap."] },
+    { key = "noHistory",     label = L["No History"],          help = L["Do not record history for this channel."] },
+    { key = "noSound",       label = L["No Sound"],            help = L["Do not play sounds for this channel."] },
+};
+
+local function makeChannelHolder(channelType, listFun)
+    local holder = CreateFrame("Frame");
+    holder:Hide();
+
+    local border = CreateFrame("Frame", nil, holder);
+    border:SetPoint("TOPLEFT", ROW_LABEL_X, -4);
+    border:SetPoint("BOTTOMRIGHT", -37, 4);
+    options.AddFramedBackdrop(border);
+
+    local ok, scroll = pcall(CreateFrame, "ScrollFrame", nil, border, "ScrollFrameTemplate");
+    if (not ok or not scroll) then
+        scroll = CreateFrame("ScrollFrame", "WIM3_ModernChannelScroll"..channelType,
+            border, "UIPanelScrollFrameTemplate");
+    end
+    scroll:SetPoint("TOPLEFT", 4, -4);
+    scroll:SetPoint("BOTTOMRIGHT", -24, 4);
+    local content = CreateFrame("Frame", nil, scroll);
+    content:SetSize(540, 1);
+    scroll:SetScrollChild(content);
+    scroll:SetScript("OnSizeChanged", function(self, w)
+        if (w and w > 0) then
+            content:SetWidth(w);
+        end
+    end);
+
+    local rows = {};
+    local function ensureRow(index)
+        local row = rows[index];
+        if (row) then
+            return row;
+        end
+        row = CreateFrame("Frame", nil, content);
+        row:SetHeight(CHANNEL_ROW_HEIGHT);
+        row:SetPoint("TOPLEFT", 0, -(index - 1) * CHANNEL_ROW_HEIGHT);
+        row:SetPoint("RIGHT", content, "RIGHT", 0, 0);
+        row.bg = row:CreateTexture(nil, "BACKGROUND");
+        row.bg:SetAllPoints();
+        row.bg:SetColorTexture(1, 1, 1, (index % 2) * .06);
+
+        row.title = row:CreateFontString(nil, "OVERLAY", "GameFontNormal");
+        row.title:SetPoint("TOPLEFT", 8, -4);
+        row.title:SetPoint("RIGHT");
+        row.title:SetJustifyH("LEFT");
+
+        row.toggles = {};
+        for t = 1, #channelToggles do
+            local toggle = channelToggles[t];
+            local cb = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate");
+            cb:SetScale(.7);
+            local col = (t - 1) % 3;
+            local line = (t - 1 - col) / 3;
+            cb:SetPoint("TOPLEFT", 8 + col * 240, -(20 + line * 22));
+            cb.text = cb:CreateFontString(nil, "OVERLAY", "ChatFontNormal");
+            cb.text:SetPoint("LEFT", cb, "RIGHT", 2, 0);
+            cb.text:SetText(toggle.label);
+            cb.key = toggle.key;
+            cb.help = toggle.help;
+            cb:SetScript("OnClick", function(self)
+                local settings = db.chat[channelType].channelSettings[row.channelName];
+                if (settings) then
+                    settings[self.key] = self:GetChecked() and true or false;
+                    options.DebugSetting("modern",
+                        "chat."..channelType..".channelSettings."..tostring(row.channelName).."."..self.key,
+                        settings[self.key]);
+                end
+            end);
+            cb:SetScript("OnEnter", function(self)
+                if (db.showToolTips == true) then
+                    _G.GameTooltip:SetOwner(self, "ANCHOR_RIGHT");
+                    _G.GameTooltip:SetText(self.help, nil, nil, nil, nil, true);
+                end
+            end);
+            cb:SetScript("OnLeave", function()
+                _G.GameTooltip:Hide();
+            end);
+            row.toggles[toggle.key] = cb;
+        end
+        rows[index] = row;
+        return row;
+    end
+
+    holder.RefreshList = function()
+        local channelList = listFun();
+        local w = scroll:GetWidth();
+        if (w and w > 0) then
+            content:SetWidth(w);
+        end
+        content:SetHeight(#channelList * CHANNEL_ROW_HEIGHT);
+        for i = 1, #channelList do
+            local row = ensureRow(i);
+            local name, active, channelNumber = string.split("*", channelList[i]);
+            active = active == "1";
+            row.channelName = name;
+            if (not db.chat[channelType].channelSettings[name]) then
+                db.chat[channelType].channelSettings[name] = {};
+            end
+            local settings = db.chat[channelType].channelSettings[name];
+
+            local nameText = name;
+            local isCommunityChannel = name:find("%d+:%d+");
+            if (isCommunityChannel and _G.ChatFrameUtil and _G.ChatFrameUtil.ResolveChannelName) then
+                nameText = _G.ChatFrameUtil.ResolveChannelName(name);
+            end
+            local channelNumberText = "";
+            if (channelNumber and channelNumber ~= "0") then
+                channelNumberText = "|cffffffff"..channelNumber..". |r";
+            end
+            row.title:SetText(channelNumberText..nameText);
+
+            local color = _G.ChatTypeInfo["CHANNEL"..(channelNumber or "")] or _G.NORMAL_FONT_COLOR;
+            if (isCommunityChannel and _G.ChatFrameUtil
+                and _G.ChatFrameUtil.GetCommunityAndStreamFromChannel) then
+                local clubId, streamId = _G.ChatFrameUtil.GetCommunityAndStreamFromChannel(name);
+                local r, g, b = _G.ChatFrameUtil.GetCommunitiesChannelColor(clubId, streamId);
+                color = { r = r, g = g, b = b };
+            end
+            row.title:SetTextColor(color.r, color.g, color.b);
+            row.title:SetAlpha(active and 1 or .4);
+
+            for key, cb in pairs(row.toggles) do
+                cb:SetChecked(settings[key] and true or false);
+                cb:SetEnabled(true);
+                cb:SetAlpha(1);
+            end
+            -- "No History" is force-ticked and greyed for community
+            -- channels: Community chat cannot be recorded (see the
+            -- CLUB_MESSAGE_ADDED branch in Modules/History.lua).
+            if (channelType == "community") then
+                row.toggles.noHistory:SetChecked(true);
+                row.toggles.noHistory:SetEnabled(false);
+                row.toggles.noHistory:SetAlpha(.5);
+            end
+            row:Show();
+        end
+        for i = #channelList + 1, #rows do
+            rows[i]:Hide();
+        end
+    end
+
+    options.RegisterModernRefresh(function()
+        if (holder:IsVisible()) then
+            holder:RefreshList();
+        end
+    end);
+    return holder;
+end
+
+local function channelRowInit(row, data)
+    if (not channelHolders[data.channelType]) then
+        channelHolders[data.channelType] = makeChannelHolder(data.channelType, data.list);
+    end
+    local holder = channelHolders[data.channelType];
+    options.AttachRowHolder(row, holder);
+    holder:RefreshList();
 end
 
 -- ------------------------------------------------------------------ General
@@ -605,6 +971,25 @@ RegisterModernPage(function(category, ui)
 
     -- Display Settings ---------------------------------------------------
     ui.Header(layout, L["Display Settings"]);
+
+    -- Rebuilt on every open, so skins registered after login (and
+    -- modern-only skins, which the classic dropdown hides) appear.
+    local function skinItems()
+        local skins = GetRegisteredSkins(true);
+        local items = {};
+        for i = 1, #skins do
+            local skin = GetSkinTable(skins[i]);
+            local tip = {};
+            if (skin.version) then table.insert(tip, L["Version"]..": "..skin.version); end
+            if (skin.author) then table.insert(tip, skin.author); end
+            if (skin.website) then table.insert(tip, skin.website); end
+            table.insert(items, { text = skins[i], value = skins[i],
+                tooltip = table.concat(tip, "\n") });
+        end
+        return items;
+    end
+    ui.Dropdown(cat, L["Window Skin:"], db.skin.selected, skinItems,
+        db.skin, "selected", nil, function(value) LoadSkin(value); end);
 
     ui.Slider(cat, L["Window Alpha"], db.windowAlpha, 1, 100, 1,
         db, "windowAlpha", nil, props, pct);
@@ -777,6 +1162,13 @@ RegisterModernPage(function(category, ui)
     addPopRulesSection(cat, layout, ui, "whisper");
     addHistorySection(cat, layout, ui, false);
 
+    ui.Header(layout, L["Filtering"]);
+    ui.Checkbox(cat, L["Enable Filtering"], modules.Filters.enabled,
+        modules.Filters, "enabled", nil,
+        function(value) EnableModule("Filters", value); end);
+    ui.Custom(layout, "WIM3SettingsFilterListTemplate",
+        { isChat = false, onInit = filterRowInit });
+
     ui.Header(layout, L["Sounds"]);
     addSoundPair(cat, ui, L["Play sound when a whisper is received."], db.sounds.whispers, "msgin", "msgin_sml");
     addSoundPair(cat, ui, L["Play special sound for battle.net friends."], db.sounds.whispers, "bnet", "bnet_sml");
@@ -820,8 +1212,42 @@ RegisterModernPage(function(category, ui)
         ui.DependsOn(neverSuppress, enable);
     end
 
+    -- Channel monitoring (world / custom / community). The enumerators
+    -- are exported by ChatEngine's options scope; empty until it loads.
+    local channelSections = {
+        { name = L["World Chat"],  channelType = "world",
+          list = function() return (GetOptionsChannelList and GetOptionsChannelList(true)) or {}; end },
+        { name = L["Custom Chat"], channelType = "custom",
+          list = function() return (GetOptionsChannelList and GetOptionsChannelList(false)) or {}; end },
+    };
+    if (_G.C_Club) then
+        table.insert(channelSections, {
+            name = L["Community Chat"], channelType = "community",
+            list = function() return (GetOptionsCommunityList and GetOptionsCommunityList()) or {}; end,
+        });
+    end
+    for i = 1, #channelSections do
+        local section = channelSections[i];
+        ui.Header(layout, section.name);
+        ui.Checkbox(cat, L["Enable"], db.chat[section.channelType].enabled,
+            db.chat[section.channelType], "enabled", nil,
+            function() modules.ChannelChat:SettingsChanged(); end);
+        ui.Custom(layout, "WIM3SettingsChannelListTemplate", {
+            channelType = section.channelType,
+            list = section.list,
+            onInit = channelRowInit,
+        });
+    end
+
     addPopRulesSection(cat, layout, ui, "chat");
     addHistorySection(cat, layout, ui, true);
+
+    ui.Header(layout, L["Filtering"]);
+    ui.Checkbox(cat, L["Enable Filtering"], modules.ChatFilters.enabled,
+        modules.ChatFilters, "enabled", nil,
+        function(value) EnableModule("ChatFilters", value); end);
+    ui.Custom(layout, "WIM3SettingsFilterListTemplate",
+        { isChat = true, onInit = filterRowInit });
 
     ui.Header(layout, L["Sounds"]);
     addSoundPair(cat, ui, L["Play sound when a message is received."], db.sounds.chat, "msgin", "msgin_sml");
@@ -837,4 +1263,81 @@ RegisterModernPage(function(category, ui)
     addSoundPair(cat, ui, L["Play special sound for %s."]:format(L["Custom Chat"]), db.sounds.chat, "custom", "custom_sml");
     addSoundPair(cat, ui, L["Play special sound for %s."]:format(L["Community Chat"]), db.sounds.chat, "community", "community_sml");
     addSoundPair(cat, ui, L["Play sound when a message is sent."], db.sounds.chat, "msgout", "msgout_sml");
+end);
+
+-- ------------------------------------------------------- Modern Theme
+-- Settings that only affect modern-only skins; every control is
+-- modifiable only while one is selected (SkinLocksOptionsStyle).
+local modernThemeNoteHolder;
+local function modernThemeNoteInit(row)
+    if (not modernThemeNoteHolder) then
+        local holder = CreateFrame("Frame");
+        holder:Hide();
+        local text = holder:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall");
+        text:SetPoint("TOPLEFT", 37, -8);
+        text:SetPoint("TOPRIGHT", -37, -8);
+        text:SetJustifyH("LEFT");
+        text:SetSpacing(3);
+        text:SetTextColor(.8, .8, .8);
+        text:SetText(L["These settings style WIM's modern-only skins (such as WIM Modern), which are built from the game's own interface art. They shape the History Viewer and the chat windows, and are available only while a modern-only skin is selected under General > Display Settings; with a classic skin active they are greyed out."]);
+        modernThemeNoteHolder = holder;
+    end
+    options.AttachRowHolder(row, modernThemeNoteHolder);
+end
+
+RegisterModernPage(function(category, ui)
+    local cat, layout = ui.Subcategory(category, L["Modern Theme"]);
+
+    local modernActive = function() return SkinLocksOptionsStyle(); end;
+
+    ui.Custom(layout, "WIM3SettingsNoteTemplate", { onInit = modernThemeNoteInit });
+
+    ui.Header(layout, L["History Viewer"]);
+
+    local function backgroundItems()
+        local items = {};
+        local list = GetChromeBackgrounds and GetChromeBackgrounds() or {};
+        for i = 1, #list do
+            table.insert(items, { value = list[i].key, text = L[list[i].label] });
+        end
+        return items;
+    end
+    -- Reapplying the skin repaints the History Viewer chrome live.
+    local function reapply()
+        LoadSkin(db.skin.selected);
+    end
+    local backgroundControls = {
+        ui.Dropdown(cat, L["Frame background"], db.modernTheme.frame,
+            backgroundItems, db.modernTheme, "frame", nil, reapply),
+        ui.Dropdown(cat, L["Selection panels background"], db.modernTheme.panels,
+            backgroundItems, db.modernTheme, "panels", nil, reapply),
+        ui.Dropdown(cat, L["Chat history background"], db.modernTheme.content,
+            backgroundItems, db.modernTheme, "content", nil, reapply),
+        ui.Checkbox(cat, L["Panels see through to the game world"],
+            db.modernTheme.cutout, db.modernTheme, "cutout",
+            L["Draws the frame background only around the panels, so a clear panel background (None or Transparent) shows the game world behind the viewer instead of the frame fill."],
+            reapply),
+    };
+
+    -- Message windows work like the History Viewer: separate frame and
+    -- message-area backgrounds, plus their own cut-out.
+    ui.Header(layout, L["Chat Windows"]);
+    table.insert(backgroundControls,
+        ui.Dropdown(cat, L["Window frame background"], db.modernTheme.chatFrame,
+            backgroundItems, db.modernTheme, "chatFrame", nil, reapply));
+    table.insert(backgroundControls,
+        ui.Dropdown(cat, L["Message area background"], db.modernTheme.chatPanel,
+            backgroundItems, db.modernTheme, "chatPanel", nil, reapply));
+    table.insert(backgroundControls,
+        ui.Checkbox(cat, L["Window sees through to the game world"],
+            db.modernTheme.chatCutout, db.modernTheme, "chatCutout",
+            L["Draws the window frame background only around the message area, so a clear message area background (None or Transparent) shows the game world behind the window."],
+            reapply));
+
+    for i = 1, #backgroundControls do
+        local control = backgroundControls[i];
+        if (control and control.init and control.init.AddModifyPredicate) then
+            control.init:AddModifyPredicate(modernActive);
+        end
+    end
 end);

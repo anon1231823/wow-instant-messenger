@@ -21,6 +21,16 @@ local tostring = tostring;
 
 local DDM = WIM.libs.DropDownMenu;
 
+-- C_Texture.GetAtlasInfo resolves helper mixins (Vector2DMixin) through
+-- the CALLING function's environment, so it must be wrapped in a function
+-- defined before the setfenv below: called directly from namespaced code
+-- it errors with "unable to find mixin or metatable".
+local function getAtlasInfo(name)
+    if (C_Texture and C_Texture.GetAtlasInfo) then
+        return C_Texture.GetAtlasInfo(name);
+    end
+end
+
 --set namespace
 setfenv(1, WIM);
 
@@ -253,18 +263,6 @@ local function isEmptyTable(tbl)
 end
 
 
--- ----------------------------------------------------------------------------
--- The 3.16.14 constant-count guardrail used to live here. It guarded the
--- NATIVE-TABLE history format against Lua 5.1's 262,143-constants-per-chunk
--- bytecode limit ("constant table overflow" resets the file -- issue #251).
--- The blob archive made it obsolete: history persists as one serialized
--- string per conversation (WIM_HistoryArchive, see WIM.lua), so the saved
--- file's constant count grows with the number of CONVERSATIONS, not
--- messages, and cannot approach the limit in practice. Worse, the meter kept
--- counting the live tree as if it were still written natively, so it warned
--- about a file that no longer exists. Removed 2026-08-13.
--- ----------------------------------------------------------------------------
-
 local function pruneHistory(historyTable, maxCount)
     while (maxCount < #historyTable) do
         table.remove(historyTable, 1);
@@ -273,7 +271,7 @@ end
 
 
 -- ----------------------------------------------------------------------------
--- 3.16.14: Battle.net friend consolidation.
+-- Battle.net friend consolidation.
 --
 -- WIM stores BN whispers keyed by the friend's BattleTag (e.g. "Friend#1234")
 -- or legacy RealID email under whichever character was active at the time.
@@ -719,19 +717,14 @@ function ChatHistory:PostEvent_ChatMessage(event, ...)
 
     event = event:gsub("CHAT_MSG_", "");
     if(event == "CLUB_MESSAGE_ADDED") then
-        -- Community (Club) chat is deliberately NOT recorded.
-        --
-        -- 3.18.0 briefly recorded it, but the feature cannot work: the client
-        -- hands club message content over as a protected-string token
-        -- ("|Kn6|k" and friends) that is resolved at DISPLAY time, in the
-        -- client's text engine, against a session-scoped lookup Lua can never
-        -- read. The plaintext never transits Lua at any point -- not in the
-        -- event payload, not in C_Club.GetMessageInfo, not in the widgets --
-        -- so the only bytes available to persist are the token, and a stored
-        -- token is a permanent "Unknown" in every future session. Recording
-        -- and its viewer support were removed 2026-08-13; anything recorded
-        -- while the feature existed is purged at load (see
-        -- PurgeLegacyCommunityHistory in WIM.lua).
+        -- Community (Club) chat is not recorded, because it cannot be.
+        -- The client delivers club message content as a protected-string
+        -- token ("|Kn6|k" and similar), resolved at display time inside
+        -- the client's text engine against a session-scoped lookup that
+        -- Lua cannot read. The plaintext never passes through Lua: not in
+        -- the event payload, not in C_Club.GetMessageInfo, not in the
+        -- widgets. The only bytes available to store are the token, and a
+        -- stored token displays as "Unknown" in every later session.
         return;
     elseif(event == "CHANNEL") then
         local recordAs;
@@ -838,7 +831,10 @@ local function createHistoryViewer()
     win:EnableMouse(true);
     win:RegisterForDrag("LeftButton");
     if win.SetResizeBounds then -- WoW 10.0
-		win:SetResizeBounds(240,240)
+		-- Same floor the SetMinResize path always had: any narrower and
+		-- the right-anchored search box and view tabs overlap the
+		-- navigation panel.
+		win:SetResizeBounds(600, 400);
 	else
    		win:SetMinResize(600, 400);
    	end
@@ -849,6 +845,7 @@ local function createHistoryViewer()
 
     -- create and set title bar text
     win.title = win:CreateFontString(win:GetName().."Title", "OVERLAY", "ChatFontNormal");
+    win.title.parentWindow = win;   -- lets skin points anchor to "window"
     win.title:SetPoint("TOPLEFT", 50 , -20);
     local font = win.title:GetFont();
     win.title:SetFont(font, 16, "");
@@ -856,6 +853,7 @@ local function createHistoryViewer()
 
     -- create close button
     win.close = CreateFrame("Button", win:GetName().."Close", win);
+    win.close.parentWindow = win;   -- lets skin points anchor to "window"
     win.close:SetWidth(18); win.close:SetHeight(18);
     win.close:SetPoint("TOPRIGHT", -24, -20);
     win.close:SetNormalTexture("Interface\\AddOns\\"..addonTocName.."\\Sources\\Options\\Textures\\blipRed");
@@ -867,10 +865,1084 @@ local function createHistoryViewer()
     -- window actions
     win:SetScript("OnShow", function(self)
             _G.PlaySound(850);
+            -- Catch skin changes made while the viewer was hidden (or
+            -- while the History module was disabled).
+            if(self.appliedSkin ~= GetSelectedSkin()) then
+                self.ApplySkin();
+            end
             self.UpdateUserList();
         end);
-    win:SetScript("OnHide", function(self) _G.PlaySound(851); end);
+    win:SetScript("OnHide", function(self)
+            _G.PlaySound(851);
+        end);
     table.insert(_G.UISpecialFrames,win:GetName());
+
+    -- ------------------------------------------------------------------
+    -- Skinning. The history_viewer skin section drives the frame's
+    -- backdrop, fonts, and accent colors. Both list-row factories call
+    -- SkinListButton (during construction below, and for rows created
+    -- later as the lists grow), so it must be defined before them.
+    -- ApplySkin itself only runs once the frame is fully built.
+    -- ------------------------------------------------------------------
+    win.SkinListButton = function(button)
+        local hv = GetSelectedSkin().history_viewer;
+        if(not hv) then return; end
+        local highlight = hv.row.highlight;
+        if(highlight.atlas and getAtlasInfo(highlight.atlas)) then
+            -- Atlas hover art (the Settings category list's, fading out
+            -- at both ends) carries its own alpha; no tinting.
+            button:SetHighlightTexture("Interface\\Buttons\\WHITE8X8");
+            local texture = button:GetHighlightTexture();
+            texture:SetAtlas(highlight.atlas);
+            texture:SetTexCoord(0, 1, 0, 1);
+            texture:SetBlendMode("BLEND");
+            texture:SetVertexColor(1, 1, 1);
+        else
+            button:SetHighlightTexture(highlight.texture, highlight.alpha_mode);
+            local texture = button:GetHighlightTexture();
+            if(texture) then
+                texture:SetTexCoord(0, 1, 0, 1);
+                texture:SetVertexColor(highlight.color[1], highlight.color[2], highlight.color[3]);
+            end
+        end
+        SetWidgetFont(button.text, hv.row);
+
+        -- Selection. The lists mark the active row with LockHighlight;
+        -- a skin may give selected rows their own art and text color
+        -- (hv.row.selected, as the Settings category list draws them),
+        -- so the lock methods are wrapped to keep the selected look
+        -- distinct from hover.
+        if(not button.wimLockWrapped) then
+            button.wimLockWrapped = true;
+            button.wimOrigLock = button.LockHighlight;
+            button.wimOrigUnlock = button.UnlockHighlight;
+            button.LockHighlight = function(self)
+                self.wimLocked = true;
+                if(self.wimSelectedStyle) then
+                    self.wimSelectedTexture:Show();
+                    local c = self.wimSelectedStyle.font_color;
+                    if(c) then self.text:SetTextColor(c[1], c[2], c[3]); end
+                else
+                    self:wimOrigLock();
+                end
+            end;
+            button.UnlockHighlight = function(self)
+                self.wimLocked = nil;
+                if(self.wimSelectedTexture) then
+                    self.wimSelectedTexture:Hide();
+                end
+                self:wimOrigUnlock();
+                local skin = GetSelectedSkin().history_viewer;
+                if(skin) then
+                    SetWidgetFont(self.text, skin.row);
+                end
+            end;
+        end
+        local selected = hv.row.selected;
+        if(selected and selected.atlas and getAtlasInfo(selected.atlas)) then
+            if(not button.wimSelectedTexture) then
+                button.wimSelectedTexture = button:CreateTexture(nil, "ARTWORK");
+                button.wimSelectedTexture:SetAllPoints();
+                button.wimSelectedTexture:Hide();
+            end
+            button.wimSelectedTexture:SetAtlas(selected.atlas);
+            button.wimSelectedTexture:SetTexCoord(0, 1, 0, 1);
+            button.wimSelectedStyle = selected;
+        else
+            button.wimSelectedStyle = nil;
+        end
+        -- Re-express the current selection under the new skin.
+        if(button.wimLocked) then
+            if(button.wimSelectedStyle) then
+                button:wimOrigUnlock();
+                button.wimSelectedTexture:Show();
+                local c = button.wimSelectedStyle.font_color;
+                if(c) then button.text:SetTextColor(c[1], c[2], c[3]); end
+            else
+                if(button.wimSelectedTexture) then
+                    button.wimSelectedTexture:Hide();
+                end
+                button:wimOrigLock();
+            end
+        elseif(button.wimSelectedTexture) then
+            button.wimSelectedTexture:Hide();
+        end
+    end
+
+    -- Optional widget styles. Skins can opt shared widgets into native
+    -- looks (hv.close art, hv.scrollbar_style = "minimal",
+    -- hv.search_style = "native"). The first restyle records the
+    -- construction-time art so switching to a skin without the style
+    -- restores it without a reload; atlas availability is checked so a
+    -- client without the art keeps the frame default.
+    local function atlasExists(name)
+        return getAtlasInfo(name) ~= nil;
+    end
+
+    local function saveTextureState(texture)
+        return { file = texture:GetTexture(), blend = texture:GetBlendMode(),
+            coords = { texture:GetTexCoord() } };
+    end
+
+    local function restoreTextureState(texture, saved)
+        texture:SetTexture(saved.file);
+        local c = saved.coords;
+        texture:SetTexCoord(c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8]);
+        texture:SetBlendMode(saved.blend);
+        texture:SetDesaturated(false);
+        texture:SetVertexColor(1, 1, 1);
+        texture:SetAlpha(1);
+    end
+
+    -- Close art may be a texture path or an atlas name (no path
+    -- separator). Atlas states reset their texcoords: SetTexCoord
+    -- windows within an atlas member, so coords left by the frame's
+    -- original art would crop the new glyph.
+    local function applyCloseArt(texture, art, blend)
+        if(not texture or not art) then return; end
+        if(string.find(art, "\\", 1, true)) then
+            texture:SetTexture(art);
+        elseif(getAtlasInfo(art)) then
+            texture:SetAtlas(art);
+        else
+            return;
+        end
+        texture:SetTexCoord(0, 1, 0, 1);
+        if(blend) then texture:SetBlendMode(blend); end
+    end
+
+    local function applyCloseStyle(hv)
+        local close = win.close;
+        if(hv.close) then
+            if(not close.wimSavedArt) then
+                local point, relativeTo, relativePoint, offX, offY = close:GetPoint(1);
+                close.wimSavedArt = {
+                    normal = saveTextureState(close:GetNormalTexture()),
+                    highlight = saveTextureState(close:GetHighlightTexture()),
+                    pushed = close:GetPushedTexture()
+                        and saveTextureState(close:GetPushedTexture()) or nil,
+                    width = close:GetWidth(), height = close:GetHeight(),
+                    point = point, relativeTo = relativeTo,
+                    relativePoint = relativePoint, offX = offX, offY = offY,
+                };
+            end
+            applyCloseArt(close:GetNormalTexture(), hv.close.NormalTexture);
+            if(hv.close.PushedTexture) then
+                if(not close:GetPushedTexture()) then
+                    close:SetPushedTexture("Interface\\Buttons\\WHITE8X8");
+                end
+                applyCloseArt(close:GetPushedTexture(), hv.close.PushedTexture);
+            end
+            applyCloseArt(close:GetHighlightTexture(), hv.close.HighlightTexture,
+                hv.close.HighlightAlphaMode);
+            if(hv.close.width) then close:SetWidth(hv.close.width); end
+            if(hv.close.height) then close:SetHeight(hv.close.height); end
+            if(hv.close.points) then
+                SetWidgetRect(close, { points = hv.close.points });
+            end
+        elseif(close.wimSavedArt) then
+            local saved = close.wimSavedArt;
+            restoreTextureState(close:GetNormalTexture(), saved.normal);
+            restoreTextureState(close:GetHighlightTexture(), saved.highlight);
+            local pushed = close:GetPushedTexture();
+            if(pushed) then
+                if(saved.pushed) then
+                    restoreTextureState(pushed, saved.pushed);
+                else
+                    pushed:SetTexture(nil);
+                end
+            end
+            close:SetWidth(saved.width);
+            close:SetHeight(saved.height);
+            close:ClearAllPoints();
+            close:SetPoint(saved.point, saved.relativeTo, saved.relativePoint,
+                saved.offX, saved.offY);
+        end
+    end
+
+    local scrollFrameNames = {
+        "WIM3_HistoryFilterListScroll",
+        "WIM3_HistoryUserListScroll",
+        "WIM3_HistoryTextFrame",
+    };
+    -- The minimal scrollbar family, as used by the Settings panel's
+    -- lists. Its modern ScrollBox sizes the thumb proportionally to the
+    -- content, so a long thumb approximates the native look on this
+    -- classic fixed-thumb slider.
+    local trimArrowAtlases = {
+        up = { normal = "minimal-scrollbar-arrow-top",
+               pushed = "minimal-scrollbar-arrow-top-down",
+               over = "minimal-scrollbar-arrow-top-over" },
+        down = { normal = "minimal-scrollbar-arrow-bottom",
+                 pushed = "minimal-scrollbar-arrow-bottom-down",
+                 over = "minimal-scrollbar-arrow-bottom-over" },
+    };
+
+    local function savePoints(region)
+        local points = {};
+        for i = 1, region:GetNumPoints() do
+            points[i] = { region:GetPoint(i) };
+        end
+        return points;
+    end
+
+    local function restorePoints(region, points)
+        region:ClearAllPoints();
+        for i = 1, #points do
+            local p = points[i];
+            region:SetPoint(p[1], p[2], p[3], p[4], p[5]);
+        end
+    end
+
+    local function styleArrowButton(button, atlases, minimal)
+        if(not button) then return; end
+        if(minimal) then
+            if(not button.wimSavedArt) then
+                button.wimSavedArt = {
+                    normal = saveTextureState(button:GetNormalTexture()),
+                    pushed = saveTextureState(button:GetPushedTexture()),
+                    disabled = saveTextureState(button:GetDisabledTexture()),
+                    highlight = saveTextureState(button:GetHighlightTexture()),
+                    width = button:GetWidth(), height = button:GetHeight(),
+                };
+            end
+            local normal = button:GetNormalTexture();
+            local pushed = button:GetPushedTexture();
+            local disabled = button:GetDisabledTexture();
+            local highlight = button:GetHighlightTexture();
+            normal:SetAtlas(atlases.normal);
+            pushed:SetAtlas(
+                atlasExists(atlases.pushed) and atlases.pushed or atlases.normal);
+            -- Blizzard's stepper keeps the plain arrow art when disabled.
+            disabled:SetAtlas(atlases.normal);
+            highlight:SetAtlas(
+                atlasExists(atlases.over) and atlases.over or atlases.normal);
+            highlight:SetBlendMode("BLEND");
+            -- SetTexCoord windows WITHIN an atlas member, so coords left
+            -- on these textures by the frame's original art would crop
+            -- the glyph; reset every state to the member's full extent.
+            normal:SetTexCoord(0, 1, 0, 1);
+            pushed:SetTexCoord(0, 1, 0, 1);
+            disabled:SetTexCoord(0, 1, 0, 1);
+            highlight:SetTexCoord(0, 1, 0, 1);
+            -- The atlases are authored 17x11, but at an odd width the
+            -- stepper's edges rasterize a half pixel differently from
+            -- the even-width track tube it shares a center with, which
+            -- makes the tube look off-center. A width of 16 keeps the
+            -- stepper on the tube's pixel parity.
+            button:SetWidth(16);
+            button:SetHeight(11);
+        elseif(button.wimSavedArt) then
+            local saved = button.wimSavedArt;
+            restoreTextureState(button:GetNormalTexture(), saved.normal);
+            restoreTextureState(button:GetPushedTexture(), saved.pushed);
+            restoreTextureState(button:GetDisabledTexture(), saved.disabled);
+            restoreTextureState(button:GetHighlightTexture(), saved.highlight);
+            button:SetWidth(saved.width);
+            button:SetHeight(saved.height);
+        end
+    end
+
+    -- Long thumb approximating the native proportional one, shrunk on
+    -- tracks too short to hold it, with the body strip windowed to the
+    -- resulting extent (thumb minus the two 8px caps, 1:1 in member
+    -- texels). Must run against the track's SETTLED height: a thumb
+    -- taller than its track inverts the slider's drag mapping.
+    local function sizeMinimalThumb(scrollBar)
+        local thumb = scrollBar.GetThumbTexture and scrollBar:GetThumbTexture();
+        if(not thumb or not scrollBar.wimThumbParts) then return; end
+        local middleInfo = getAtlasInfo("minimal-scrollbar-small-thumb-middle");
+        if(not middleInfo) then return; end
+        local trackHeight = scrollBar:GetHeight() or 0;
+        local thumbHeight = 56;
+        if(trackHeight > 0) then
+            -- Cap the thumb well below the track length. A thumb almost
+            -- as long as the track leaves almost no drag travel, and
+            -- mapping the whole scroll range onto a few pixels breaks
+            -- dragging on short tracks such as the filter list's.
+            local cap = math.floor(trackHeight * 0.6);
+            if(cap < 20) then cap = 20; end
+            if(thumbHeight > cap) then thumbHeight = cap; end
+        end
+        thumb:SetSize(8, thumbHeight);
+        local bodyExtent = (thumbHeight - 16) / middleInfo.height;
+        if(bodyExtent > 1) then bodyExtent = 1; end
+        scrollBar.wimThumbParts[3]:SetTexCoord(0, 1, 0, bodyExtent);
+    end
+
+    local function styleThumb(scrollBar, minimal)
+        local thumb = scrollBar.GetThumbTexture and scrollBar:GetThumbTexture();
+        if(not thumb) then return; end
+        -- The native thumb is the three-piece small-thumb set: rounded
+        -- caps with a body strip between them. The slider clamps only
+        -- its thumb texture, so every visual piece must sit INSIDE that
+        -- rect or the thumb overshoots the track ends at the extremes:
+        -- the rect is made invisible and carries the caps at each end
+        -- with the body between them. The body atlas is a full-length
+        -- strip meant to be WINDOWED to the body's extent (stretching
+        -- collapses the art); since SetTexCoord operates within the
+        -- atlas member, the window is simply the strip's full width by
+        -- the body's height in member texels.
+        local middleInfo = getAtlasInfo("minimal-scrollbar-small-thumb-middle");
+        if(minimal and middleInfo
+                and atlasExists("minimal-scrollbar-small-thumb-top")
+                and atlasExists("minimal-scrollbar-small-thumb-bottom")) then
+            if(not thumb.wimSavedArt) then
+                thumb.wimSavedArt = saveTextureState(thumb);
+                thumb.wimSavedArt.width, thumb.wimSavedArt.height = thumb:GetSize();
+            end
+            thumb:SetAlpha(0);
+            if(not scrollBar.wimThumbParts) then
+                local capTop = scrollBar:CreateTexture(nil, "ARTWORK");
+                capTop:SetAtlas("minimal-scrollbar-small-thumb-top", true);
+                capTop:SetPoint("TOP", thumb, "TOP");
+                local capBottom = scrollBar:CreateTexture(nil, "ARTWORK");
+                capBottom:SetAtlas("minimal-scrollbar-small-thumb-bottom", true);
+                capBottom:SetPoint("BOTTOM", thumb, "BOTTOM");
+                local body = scrollBar:CreateTexture(nil, "ARTWORK");
+                body:SetAtlas("minimal-scrollbar-small-thumb-middle");
+                body:SetPoint("TOPLEFT", capTop, "BOTTOMLEFT");
+                body:SetPoint("BOTTOMRIGHT", capBottom, "TOPRIGHT");
+                scrollBar.wimThumbParts = { capTop, capBottom, body };
+            end
+            -- Size now, and again whenever the track's rectangle
+            -- settles. At construction GetHeight can read 0 or stale,
+            -- and a thumb taller than its track inverts the slider's
+            -- drag mapping: the drag denominator, track minus thumb,
+            -- goes negative. The short filter-list bar hit exactly
+            -- that.
+            if(not scrollBar.wimSizeHooked) then
+                scrollBar.wimSizeHooked = true;
+                scrollBar:HookScript("OnSizeChanged", function(self)
+                    if(self.wimThumbParts and self.wimThumbParts[1]:IsShown()) then
+                        sizeMinimalThumb(self);
+                    end
+                end);
+            end
+            sizeMinimalThumb(scrollBar);
+        elseif(not minimal and thumb.wimSavedArt) then
+            restoreTextureState(thumb, thumb.wimSavedArt);
+            thumb:SetSize(thumb.wimSavedArt.width, thumb.wimSavedArt.height);
+        end
+        if(scrollBar.wimThumbParts) then
+            for i=1, #scrollBar.wimThumbParts do
+                scrollBar.wimThumbParts[i]:SetShown(minimal);
+            end
+        end
+        -- The track tube behind the thumb, with its end caps;
+        -- corner-anchored to the caps so all three pieces pixel-snap to
+        -- the same edges.
+        if(minimal and not scrollBar.wimTrack
+                and atlasExists("!minimal-scrollbar-track-middle")
+                and atlasExists("minimal-scrollbar-track-top")
+                and atlasExists("minimal-scrollbar-track-bottom")) then
+            local top = scrollBar:CreateTexture(nil, "BACKGROUND");
+            top:SetAtlas("minimal-scrollbar-track-top", true);
+            top:SetPoint("TOP");
+            local bottom = scrollBar:CreateTexture(nil, "BACKGROUND");
+            bottom:SetAtlas("minimal-scrollbar-track-bottom", true);
+            bottom:SetPoint("BOTTOM");
+            local middle = scrollBar:CreateTexture(nil, "BACKGROUND");
+            middle:SetAtlas("!minimal-scrollbar-track-middle");
+            middle:SetPoint("TOPLEFT", top, "BOTTOMLEFT");
+            middle:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT");
+            scrollBar.wimTrack = { top, middle, bottom };
+        end
+        if(scrollBar.wimTrack) then
+            for i=1, #scrollBar.wimTrack do
+                scrollBar.wimTrack[i]:SetShown(minimal);
+            end
+        end
+    end
+
+    local function applyScrollbarStyle(hv)
+        local minimal = (hv.scrollbar_style == "minimal")
+            and atlasExists(trimArrowAtlases.up.normal);
+        for i=1, #scrollFrameNames do
+            local barName = scrollFrameNames[i].."ScrollBar";
+            local bar = _G[barName];
+            if(bar) then
+                local up = _G[barName.."ScrollUpButton"] or bar.ScrollUpButton;
+                local down = _G[barName.."ScrollDownButton"] or bar.ScrollDownButton;
+                styleArrowButton(up, trimArrowAtlases.up, minimal);
+                styleArrowButton(down, trimArrowAtlases.down, minimal);
+                -- The native bar reserves 19px at each end of its track
+                -- for a stepper: 11px of arrow plus an 8px gap before
+                -- the track cap. The slider rect IS this track, so its
+                -- ends pull in and the steppers hang off them at that
+                -- spacing. An extra 4px per end keeps the stepper tips
+                -- clear of the inset borders the frames butt against,
+                -- and the 3px left shift keeps the 17px-wide steppers
+                -- off the wells' right border art.
+                if(minimal) then
+                    if(not bar.wimSavedPoints) then
+                        bar.wimSavedPoints = savePoints(bar);
+                    end
+                    bar:ClearAllPoints();
+                    for p=1, #bar.wimSavedPoints do
+                        local pt = bar.wimSavedPoints[p];
+                        local x = pt[4] or 0;
+                        if(x > 0) then x = x - 3; end
+                        local y = pt[5] or 0;
+                        if(string.find(pt[1], "^TOP")) then
+                            y = y - 7;
+                        elseif(string.find(pt[1], "^BOTTOM")) then
+                            y = y + 7;
+                        end
+                        bar:SetPoint(pt[1], pt[2], pt[3], x, y);
+                    end
+                    if(up and down) then
+                        if(not up.wimSavedPoints) then
+                            up.wimSavedPoints = savePoints(up);
+                            down.wimSavedPoints = savePoints(down);
+                        end
+                        up:ClearAllPoints();
+                        up:SetPoint("BOTTOM", bar, "TOP", 0, 8);
+                        down:ClearAllPoints();
+                        down:SetPoint("TOP", bar, "BOTTOM", 0, -8);
+                    end
+                else
+                    if(bar.wimSavedPoints) then
+                        restorePoints(bar, bar.wimSavedPoints);
+                    end
+                    if(up and up.wimSavedPoints) then
+                        restorePoints(up, up.wimSavedPoints);
+                        restorePoints(down, down.wimSavedPoints);
+                    end
+                end
+                -- After the anchors settle, so the thumb can size to
+                -- the final track.
+                styleThumb(bar, minimal);
+                dPrint("History Viewer: scrollbar "..barName
+                    .." up="..tostring(up ~= nil).." down="..tostring(down ~= nil)
+                    .." thumb="..tostring((bar.GetThumbTexture and bar:GetThumbTexture()) ~= nil));
+            else
+                dPrint("History Viewer: scroll bar not found: "..barName);
+            end
+        end
+        -- The message view scrolls a ScrollingMessageFrame, which has no
+        -- slider of its own -- just floating scroll buttons in the
+        -- gutter right of the text. The minimal style raises a matching
+        -- scrollbar in that gutter and hangs the buttons off its ends
+        -- like the other bars' steppers.
+        local chat = win.content.chatFrame;
+        styleArrowButton(chat.up, trimArrowAtlases.up, minimal);
+        styleArrowButton(chat.down, trimArrowAtlases.down, minimal);
+        if(minimal and not chat.wimScrollBar
+                and chat.GetMaxScrollRange and chat.GetScrollOffset) then
+            local bar = CreateFrame("Slider", nil, chat);
+            bar:SetOrientation("VERTICAL");
+            bar:SetWidth(16);
+            bar:SetPoint("TOPRIGHT", chat, "TOPRIGHT", 24, -21);
+            bar:SetPoint("BOTTOMRIGHT", chat, "BOTTOMRIGHT", 24, 21);
+            bar:SetMinMaxValues(0, 0);
+            bar:SetValueStep(1);
+            bar:SetValue(0);
+            bar:SetThumbTexture(bar:CreateTexture(nil, "OVERLAY"));
+            bar.wimMaxRange = 0;
+            bar:SetScript("OnValueChanged", function(self, value)
+                if(self.wimSyncing) then return; end
+                chat:SetScrollOffset(self.wimMaxRange - math.floor(value + 0.5));
+            end);
+            -- The message frame offers no scroll event a classic slider
+            -- can listen to, so the bar follows it on a short cadence.
+            bar.wimElapsed = 1;
+            bar:SetScript("OnUpdate", function(self, elapsed)
+                self.wimElapsed = self.wimElapsed + elapsed;
+                if(self.wimElapsed < 0.1) then return; end
+                self.wimElapsed = 0;
+                local maxRange = chat:GetMaxScrollRange();
+                self.wimSyncing = true;
+                if(maxRange ~= self.wimMaxRange) then
+                    self.wimMaxRange = maxRange;
+                    self:SetMinMaxValues(0, maxRange);
+                end
+                self:SetValue(maxRange - chat:GetScrollOffset());
+                self.wimSyncing = false;
+            end);
+            chat.wimScrollBar = bar;
+        end
+        local bar = chat.wimScrollBar;
+        if(bar) then
+            bar:SetShown(minimal);
+            styleThumb(bar, minimal);
+            if(minimal) then
+                if(not chat.up.wimSavedPoints) then
+                    chat.up.wimSavedPoints = savePoints(chat.up);
+                    chat.down.wimSavedPoints = savePoints(chat.down);
+                end
+                chat.up:ClearAllPoints();
+                chat.up:SetPoint("BOTTOM", bar, "TOP", 0, 8);
+                chat.down:ClearAllPoints();
+                chat.down:SetPoint("TOP", bar, "BOTTOM", 0, -8);
+            elseif(chat.up.wimSavedPoints) then
+                restorePoints(chat.up, chat.up.wimSavedPoints);
+                restorePoints(chat.down, chat.down.wimSavedPoints);
+            end
+        end
+        dPrint("History Viewer: scrollbar style '"..tostring(hv.scrollbar_style or "default")
+            .."' native="..tostring(minimal)
+            ..", atlases: arrows="..tostring(atlasExists(trimArrowAtlases.up.normal))
+            .." thumb="..tostring(atlasExists("minimal-scrollbar-small-thumb-middle"))
+            .." track="..tostring(atlasExists("!minimal-scrollbar-track-middle")));
+    end
+
+    -- The native search box, reproduced from a live dump of the
+    -- Settings panel's: 8x20 border caps (the left one 5px outside the
+    -- box), a 10x10 magnifying glass at LEFT (1,-1) that lights white
+    -- while the box is focused or filled, grey "Search" instructions
+    -- that hide on focus, and a 17x17 clear button overlapping the
+    -- box's right end that only shows while focused or filled.
+    local function updateSearchState()
+        local box = win.search.text;
+        local clear = win.search.clear;
+        if(not clear.wimNativeMode) then return; end
+        local active = box:HasFocus() or box:GetText() ~= "";
+        clear:SetShown(active);
+        if(box.wimInstructions) then
+            box.wimInstructions:SetShown(not box:HasFocus() and box:GetText() == "");
+        end
+        if(box.wimSearchIcon) then
+            if(active) then
+                box.wimSearchIcon:SetVertexColor(1, 1, 1);
+            else
+                box.wimSearchIcon:SetVertexColor(.6, .6, .6);
+            end
+        end
+    end
+
+    local function applySearchStyle(hv)
+        local box = win.search.text;
+        local native = (hv.search_style == "native")
+            and atlasExists("common-search-border-middle");
+        if(hv.search_style == "native" and not native) then
+            dPrint("History Viewer: native search-box atlases unavailable; keeping frame default.");
+        end
+        if(native and not box.wimNativeBorder) then
+            -- Explicit sizes throughout, taken from the native box's
+            -- rendered rects: the atlases are authored larger.
+            local left = box:CreateTexture(nil, "BACKGROUND");
+            left:SetAtlas("common-search-border-left");
+            left:SetSize(8, 20);
+            left:SetPoint("LEFT", -5, 0);
+            local right = box:CreateTexture(nil, "BACKGROUND");
+            right:SetAtlas("common-search-border-right");
+            right:SetSize(8, 20);
+            right:SetPoint("RIGHT", 0, 0);
+            local middle = box:CreateTexture(nil, "BACKGROUND");
+            middle:SetAtlas("common-search-border-middle");
+            middle:SetPoint("TOPLEFT", left, "TOPRIGHT");
+            middle:SetPoint("BOTTOMRIGHT", right, "BOTTOMLEFT");
+            local icon = box:CreateTexture(nil, "OVERLAY");
+            icon:SetAtlas("common-search-magnifyingglass");
+            icon:SetSize(10, 10);
+            icon:SetPoint("LEFT", 1, -1);
+            icon:SetVertexColor(.6, .6, .6);
+            box.wimSearchIcon = icon;
+            local instructions = box:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall");
+            instructions:SetText(L["Search"]);
+            instructions:SetTextColor(.35, .35, .35);
+            instructions:SetJustifyH("LEFT");
+            instructions:SetPoint("TOPLEFT", 16, 0);
+            instructions:SetPoint("BOTTOMRIGHT", -20, 0);
+            box.wimInstructions = instructions;
+            box.wimNativeBorder = { left, right, middle, icon, instructions };
+        end
+        if(box.wimNativeBorder) then
+            for i=1, #box.wimNativeBorder do
+                box.wimNativeBorder[i]:SetShown(native);
+            end
+        end
+        -- The construction-time framed backdrop carries the classic look.
+        if(box.backdrop) then
+            for _, piece in pairs(box.backdrop) do
+                if(piece.SetShown) then
+                    piece:SetShown(not native);
+                end
+            end
+        end
+        local clear = win.search.clear;
+        clear.wimNativeMode = native and atlasExists("common-search-clearbutton");
+        if(not box.wimSearchHooked) then
+            box.wimSearchHooked = true;
+            box:HookScript("OnTextChanged", updateSearchState);
+            box:HookScript("OnEditFocusGained", updateSearchState);
+            box:HookScript("OnEditFocusLost", updateSearchState);
+        end
+        if(clear.wimNativeMode) then
+            if(not clear.wimSavedArt) then
+                clear.wimSavedArt = {
+                    normal = saveTextureState(clear:GetNormalTexture()),
+                    pushed = saveTextureState(clear:GetPushedTexture()),
+                    width = clear:GetWidth(), height = clear:GetHeight(),
+                    points = savePoints(clear), boxPoints = savePoints(box),
+                    fontObject = box:GetFontObject(),
+                    boxHeight = box:GetHeight(),
+                };
+            end
+            -- Native metrics: FRIZQT 10 text inset 16/20 in a 22px box,
+            -- no external label (the instructions inside replace it),
+            -- the clear icon drawn 10x10 at half alpha until hovered.
+            box:SetFontObject(_G.GameFontHighlightSmall);
+            box:SetHeight(22);
+            box:SetTextInsets(16, 20, 0, 0);
+            win.search.label:Hide();
+            local clearTextures = { clear:GetNormalTexture(), clear:GetPushedTexture() };
+            for i=1, #clearTextures do
+                clearTextures[i]:SetAtlas("common-search-clearbutton");
+                clearTextures[i]:SetTexCoord(0, 1, 0, 1);
+                clearTextures[i]:ClearAllPoints();
+                clearTextures[i]:SetPoint("CENTER");
+                clearTextures[i]:SetSize(10, 10);
+            end
+            clear:SetSize(17, 17);
+            clear:SetAlpha(.5);
+            if(not clear.wimHoverHooked) then
+                clear.wimHoverHooked = true;
+                clear:HookScript("OnEnter", function(self)
+                    if(self.wimNativeMode) then self:SetAlpha(1); end
+                end);
+                clear:HookScript("OnLeave", function(self)
+                    if(self.wimNativeMode) then self:SetAlpha(.5); end
+                end);
+            end
+            box:ClearAllPoints();
+            -- In the flush layout the band's right edge IS the content
+            -- panel's right edge, and the box aligns with it; the old
+            -- band kept an 8px margin.
+            box:SetPoint("RIGHT", win.search, "RIGHT",
+                (hv.layout == "flush") and 0 or -8, 0);
+            clear:ClearAllPoints();
+            clear:SetPoint("RIGHT", box, "RIGHT", -3, 0);
+            updateSearchState();
+        elseif(not native and clear.wimSavedArt) then
+            local saved = clear.wimSavedArt;
+            restoreTextureState(clear:GetNormalTexture(), saved.normal);
+            restoreTextureState(clear:GetPushedTexture(), saved.pushed);
+            local clearTextures = { clear:GetNormalTexture(), clear:GetPushedTexture() };
+            for i=1, #clearTextures do
+                clearTextures[i]:ClearAllPoints();
+                clearTextures[i]:SetAllPoints(clear);
+            end
+            clear:SetSize(saved.width, saved.height);
+            clear:SetAlpha(1);
+            box:SetFontObject(saved.fontObject);
+            box:SetHeight(saved.boxHeight);
+            box:SetTextInsets(0, 0, 0, 0);
+            win.search.label:Show();
+            restorePoints(box, saved.boxPoints);
+            restorePoints(clear, saved.points);
+            clear:Show();
+        end
+    end
+
+    -- Standard-panel chrome (hv.frame_style = "panel"): the stock metal
+    -- nine-slice frame over a rock background, with recessed inset wells
+    -- around the navigation and content panes -- the same construction
+    -- as the Guild & Communities panel. Built lazily on first request;
+    -- if the client lacks the nine-slice layouts the skin falls back to
+    -- its backdrop.
+    local function buildPanelChrome()
+        local apply = _G.NineSliceUtil and _G.NineSliceUtil.ApplyLayoutByName;
+        if(not apply) then return false; end
+
+        local chrome = CreateFrame("Frame", nil, win);
+        -- The metal is a thin rail with a title band: measured from the
+        -- game's atlas sheets, the left rail runs at +6..+8 inside the
+        -- window rect, the right rail at -3..+1 (the art is not
+        -- symmetric), the band spans the top 20px and the bottom rail
+        -- sits on the edge; everything outside the rails in the pieces
+        -- is transparent padding.
+        chrome:SetAllPoints();
+        chrome:SetFrameLevel(win:GetFrameLevel());
+        -- Rock fill running UNDER the rails to their outer edges (the
+        -- rails draw in the OVERLAY layer above it): butting the fill
+        -- against the rail cores leaves their anti-aliased inner edges
+        -- see-through.
+        chrome.bg = chrome:CreateTexture(nil, "BACKGROUND", nil, -8);
+        chrome.bg:SetTexture("Interface\\FrameGeneral\\UI-Background-Rock", true, true);
+        chrome.bg:SetHorizTile(true);
+        chrome.bg:SetVertTile(true);
+        -- Left/top/bottom are the insets native panels on this chrome
+        -- give their own background (SettingsFrameTemplate's Bg),
+        -- stopping at the bottom on the row where the rounded corner
+        -- feet are still opaque -- so the fill can neither square off
+        -- the corners nor leave the rail's upper shoulder unbacked. The
+        -- right differs from the native -3: this art's right rail core
+        -- runs past the window edge (-3.5..+1), and stopping short of
+        -- the edge leaves the rail's half-opaque band see-through.
+        chrome.bg:SetPoint("TOPLEFT", 7, -18);
+        chrome.bg:SetPoint("BOTTOMRIGHT", 0, 3);
+        win.wimChromeBg = chrome.bg;
+
+        local function makeInset(parent)
+            local inset = CreateFrame("Frame", nil, parent);
+            inset:SetAllPoints();
+            inset:SetFrameLevel(parent:GetFrameLevel());
+            inset.bg = inset:CreateTexture(nil, "BACKGROUND", nil, -7);
+            inset.bg:SetTexture("Interface\\FrameGeneral\\UI-Background-Marble", true, true);
+            inset.bg:SetHorizTile(true);
+            inset.bg:SetVertTile(true);
+            inset.bg:SetVertexColor(.45, .45, .45);
+            inset.bg:SetPoint("TOPLEFT", 2, -2);
+            inset.bg:SetPoint("BOTTOMRIGHT", -2, 2);
+            return inset;
+        end
+        local insetNav = makeInset(win.nav);
+        local insetContent = makeInset(win.content);
+        win.wimNavWellBg = insetNav.bg;
+        win.wimContentWellBg = insetContent.bg;
+
+        -- Cut-out mode: four strips covering only the margin around
+        -- the wells, so a clear well background looks through to the
+        -- world. Hidden until db.modernTheme.cutout selects them over
+        -- the single fill.
+        local function makeStrip()
+            local strip = chrome:CreateTexture(nil, "BACKGROUND", nil, -8);
+            strip:Hide();
+            return strip;
+        end
+        local stripTop = makeStrip();
+        stripTop:SetPoint("TOPLEFT", chrome, "TOPLEFT", 7, -18);
+        stripTop:SetPoint("RIGHT", chrome, "RIGHT", 0, 0);
+        stripTop:SetPoint("BOTTOM", win.nav, "TOP", 0, 0);
+        local stripLeft = makeStrip();
+        stripLeft:SetPoint("TOPLEFT", win.nav, "TOPLEFT", -11, 0);
+        stripLeft:SetPoint("RIGHT", win.nav, "LEFT", 0, 0);
+        stripLeft:SetPoint("BOTTOM", win.nav, "BOTTOM", 0, 0);
+        local stripRight = makeStrip();
+        stripRight:SetPoint("TOPLEFT", win.content, "TOPRIGHT", 0, 0);
+        stripRight:SetPoint("RIGHT", chrome, "RIGHT", 0, 0);
+        stripRight:SetPoint("BOTTOM", win.content, "BOTTOM", 0, 0);
+        local stripBottom = makeStrip();
+        stripBottom:SetPoint("TOPLEFT", win.nav, "BOTTOMLEFT", -11, 0);
+        stripBottom:SetPoint("RIGHT", chrome, "RIGHT", 0, 0);
+        stripBottom:SetPoint("BOTTOM", chrome, "BOTTOM", 0, 3);
+        win.wimChromeStrips = { stripTop, stripLeft, stripRight, stripBottom };
+
+        if(not (pcall(apply, chrome, "ButtonFrameTemplateNoPortrait")
+                and pcall(apply, insetNav, "InsetFrameTemplate")
+                and pcall(apply, insetContent, "InsetFrameTemplate"))) then
+            chrome:Hide();
+            insetNav:Hide();
+            insetContent:Hide();
+            dPrint("History Viewer: nine-slice layouts unavailable; keeping the backdrop style.");
+            return false;
+        end
+
+
+        win.wimChrome = chrome;
+        win.nav.wimInset = insetNav;
+        win.content.wimInset = insetContent;
+        return true;
+    end
+
+    -- Modern Theme backgrounds: the frame fill and the two well fills
+    -- follow db.modernTheme (catalog keys; see Sources/Skinner.lua).
+    win.ApplyChromeBackgrounds = function()
+        local theme = db and db.modernTheme;
+        if(not theme or not win.wimChromeBg) then return; end
+        local cutout = theme.cutout and win.wimChromeStrips and true or false;
+        win.wimChromeBg:SetShown(not cutout);
+        if(win.wimChromeStrips) then
+            for i=1, #win.wimChromeStrips do
+                win.wimChromeStrips[i]:SetShown(cutout);
+                if(cutout) then
+                    ApplyChromeBackgroundChoice(win.wimChromeStrips[i], theme.frame);
+                end
+            end
+        end
+        if(not cutout) then
+            ApplyChromeBackgroundChoice(win.wimChromeBg, theme.frame);
+        end
+        ApplyChromeBackgroundChoice(win.wimNavWellBg, theme.panels);
+        ApplyChromeBackgroundChoice(win.wimContentWellBg, theme.content);
+    end
+
+    local function applyFrameStyle(hv)
+        local panel = (hv.frame_style == "panel");
+        if(panel and not win.wimChrome and not win.wimChromeFailed) then
+            win.wimChromeFailed = not buildPanelChrome();
+        end
+        panel = panel and win.wimChrome ~= nil;
+        if(win.wimChrome) then
+            win.wimChrome:SetShown(panel);
+            win.nav.wimInset:SetShown(panel);
+            win.content.wimInset:SetShown(panel);
+            if(panel) then
+                win.ApplyChromeBackgrounds();
+            end
+        end
+        return panel;
+    end
+
+    win.ApplySkin = function()
+        local skin = GetSelectedSkin();
+        local hv = skin.history_viewer;
+        if(not hv) then return; end
+        win.appliedSkin = skin;
+
+        if(applyFrameStyle(hv)) then
+            win:SetBackdrop(nil);
+        else
+            win.backdropInfo = {
+                bgFile = hv.backdrop.bgFile,
+                edgeFile = hv.backdrop.edgeFile,
+                tile = hv.backdrop.tile,
+                tileSize = hv.backdrop.tileSize,
+                edgeSize = hv.backdrop.edgeSize,
+                insets = {
+                    left = hv.backdrop.insets.left,
+                    right = hv.backdrop.insets.right,
+                    top = hv.backdrop.insets.top,
+                    bottom = hv.backdrop.insets.bottom,
+                },
+            };
+            win:ApplyBackdrop();
+        end
+
+        SetWidgetFont(win.title, hv.title);
+        SetWidgetRect(win.title, hv.title);
+        SetWidgetFont(win.nav.filters.text, hv.header);
+        SetWidgetFont(win.search.label, hv.header);
+
+        -- Character selector: the modern dropdown control when the
+        -- skin opts in and the client has the Menu API, the classic
+        -- one otherwise.
+        local modernDrop = (hv.dropdown_style == "modern") and win.nav.userModern;
+        if(win.nav.userModern) then
+            win.nav.userModern:SetShown(modernDrop and true or false);
+            if(modernDrop) then
+                win.nav.userModern:OverrideText(win.USERLABEL
+                    or win.nav.user.describeUser(win.USER));
+            end
+        end
+        win.nav.user:SetShown(not modernDrop);
+
+        local divider = hv.divider_color;
+        win.nav.border:SetColorTexture(divider[1], divider[2], divider[3], divider[4]);
+        win.nav.userList.border:SetColorTexture(divider[1], divider[2], divider[3], divider[4]);
+        win.content.border:SetColorTexture(divider[1], divider[2], divider[3], divider[4]);
+        local strip = hv.strip_color;
+        -- A skin may dress the filters strip as a Settings-style
+        -- section header (hv.header.atlas). The atlas is a tall
+        -- downward fade, so it windows to the strip's own height. The
+        -- band grows to the native header height, the filter rows
+        -- yield below it, and it reaches over the 2px slot the frame
+        -- reserves for the classic divider line (invisible in skins
+        -- that use a header band).
+        local headerAtlas = hv.header and hv.header.atlas;
+        local headerInfo = headerAtlas and getAtlasInfo(headerAtlas);
+        local border = win.nav.filters.border;
+        local filtersDrop = (hv.dropdown_style == "modern") and win.nav.filtersModern;
+        if(win.nav.filtersModern) then
+            win.nav.filtersModern:SetShown(filtersDrop and true or false);
+        end
+        win.nav.filters.text:SetShown(not filtersDrop);
+        win.nav.filters.header:SetShown(not filtersDrop);
+        -- The five filter rows need headerHeight + 100px + a small
+        -- buffer, or the last row's highlight and delete button overlap
+        -- the well's bottom border.
+        if(filtersDrop) then
+            -- The modern dropdown replaces the band entirely.
+            border:Hide();
+            win.nav.filters:SetHeight(133);
+            win.nav.filters.scroll:SetPoint("TOPLEFT", 0, -30);
+            win.nav.filtersModern:OverrideText(win.nav.filters.text:GetText() or L["Filters"]);
+        elseif(headerInfo) then
+            border:Show();
+            border:SetHeight(26);
+            border:SetPoint("TOPRIGHT", 2, 0);
+            win.nav.filters:SetHeight(131);
+            win.nav.filters.scroll:SetPoint("TOPLEFT", 0, -28);
+            border:SetAtlas(headerAtlas);
+            local extent = 26 / headerInfo.height;
+            if(extent > 1) then extent = 1; end
+            border:SetTexCoord(0, 1, 0, extent);
+            border:SetVertexColor(1, 1, 1, 1);
+        else
+            border:Show();
+            border:SetHeight(20);
+            border:SetPoint("TOPRIGHT", 0, 0);
+            win.nav.filters:SetHeight(125);
+            win.nav.filters.scroll:SetPoint("TOPLEFT", 0, -22);
+            border:SetTexCoord(0, 1, 0, 1);
+            border:SetColorTexture(strip[1], strip[2], strip[3], strip[4]);
+        end
+        win.search.bg:SetColorTexture(strip[1], strip[2], strip[3], strip[4]);
+
+        SetWidgetFont(win.content.chatFrame, hv.content);
+        SetWidgetFont(win.content.textFrame.text, hv.content);
+        SetWidgetFont(win.search.text, hv.content);
+
+        for i=1, #win.content.tabs do
+            local tab = win.content.tabs[i];
+            tab.bg:SetColorTexture(strip[1], strip[2], strip[3], strip[4]);
+            SetWidgetFont(tab.text, hv.tab);
+            tab:SetWidth(tab.text:GetStringWidth() + 16);
+        end
+
+        for i=1, #win.nav.filters.scroll.buttons do
+            win.SkinListButton(win.nav.filters.scroll.buttons[i]);
+        end
+        for i=1, #win.nav.userList.scroll.buttons do
+            win.SkinListButton(win.nav.userList.scroll.buttons[i]);
+        end
+
+        -- Flush layout (hv.layout = "flush"): the Settings panel's own
+        -- arrangement -- view tabs top-left and the search box
+        -- top-right in the band between the title bar and the panes,
+        -- the content pane rising to the navigation panel's top and
+        -- dropping flush with its bottom, and the resize grip seated
+        -- in the frame corner.
+        local flush = (hv.layout == "flush");
+        if(flush and not win.wimLayoutSaved) then
+            local tabPoints = {};
+            for i=1, #win.content.tabs do
+                tabPoints[i] = savePoints(win.content.tabs[i]);
+            end
+            win.wimLayoutSaved = {
+                search = savePoints(win.search),
+                content = savePoints(win.content),
+                nav = savePoints(win.nav),
+                tabs = tabPoints,
+                resize = savePoints(win.resize),
+                searchHeight = win.search:GetHeight(),
+            };
+        end
+        if(flush) then
+            -- Right inset 14, not mirroring the left 18: the side rails
+            -- are asymmetric (left core 6..8.5 in, right core 3.5 in to
+            -- 1 out), so equal WELL insets read as more padding on the
+            -- right; 14 gives both sides the same visual gap rail-to-well.
+            -- The panes start at -52, opening a band under the title
+            -- bar tall enough for the tabs to keep clear padding; the
+            -- search band centers in it (title bottom -20.5 to -52).
+            win.nav:ClearAllPoints();
+            win.nav:SetPoint("TOPLEFT", win, "TOPLEFT", 18, -52);
+            win.nav:SetPoint("BOTTOMLEFT", win, "BOTTOMLEFT", 18, 18);
+            win.search:ClearAllPoints();
+            win.search:SetPoint("TOPLEFT", win, "TOPLEFT", 218, -25);
+            win.search:SetPoint("TOPRIGHT", win, "TOPRIGHT", -14, -25);
+            win.search:SetHeight(26);
+            win.search.bg:Hide();
+            win.content:ClearAllPoints();
+            win.content:SetPoint("TOPLEFT", win, "TOPLEFT", 218, -52);
+            win.content:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -14, 18);
+            -- Bottom-anchored tab chain, so the active tab's taller art
+            -- grows upward off a shared baseline; the base sits 1px into
+            -- the navigation panel's top edge, as the Settings panel
+            -- seats its tabs on the category list.
+            for i=1, #win.content.tabs do
+                local tab = win.content.tabs[i];
+                tab:ClearAllPoints();
+                if(i == 1) then
+                    -- Indented off the panel's left edge, as the
+                    -- Settings panel indents its tab row.
+                    tab:SetPoint("BOTTOMLEFT", win, "TOPLEFT", 34, -53);
+                else
+                    tab:SetPoint("BOTTOMLEFT", win.content.tabs[i-1], "BOTTOMRIGHT", 2, 0);
+                end
+            end
+            -- Into the very corner, matching the close button's seat on
+            -- the opposite corner.
+            win.resize:ClearAllPoints();
+            win.resize:SetPoint("BOTTOMRIGHT", 1, 1);
+        elseif(win.wimLayoutSaved) then
+            restorePoints(win.search, win.wimLayoutSaved.search);
+            win.search:SetHeight(win.wimLayoutSaved.searchHeight);
+            win.search.bg:Show();
+            restorePoints(win.content, win.wimLayoutSaved.content);
+            restorePoints(win.nav, win.wimLayoutSaved.nav);
+            for i=1, #win.content.tabs do
+                restorePoints(win.content.tabs[i], win.wimLayoutSaved.tabs[i]);
+            end
+            restorePoints(win.resize, win.wimLayoutSaved.resize);
+        end
+        win.RefreshTabVisuals();
+
+        applyCloseStyle(hv);
+        applyScrollbarStyle(hv);
+        applySearchStyle(hv);
+    end
+
+    -- Tab art. The native style dresses each view tab in the Settings
+    -- panel's own tab pieces (the Game/AddOns tabs): a three-piece
+    -- plate per state, the active one taller and lit, gold label on
+    -- the active tab. The legacy style is the flat strip + alpha the
+    -- classic skin ships.
+    win.RefreshTabVisuals = function()
+        local hv = GetSelectedSkin().history_viewer;
+        if(not hv) then return; end
+        local native = (hv.tab_style == "native")
+            and atlasExists("options_tab_active_middle")
+            and atlasExists("options_tab_middle");
+        local goldR, goldG, goldB = _G.GameFontNormal:GetTextColor();
+        for i=1, #win.content.tabs do
+            local tab = win.content.tabs[i];
+            local active = (win.TAB == tab.index);
+            if(native) then
+                if(not tab.wimTabParts) then
+                    local left = tab:CreateTexture(nil, "BACKGROUND");
+                    left:SetPoint("BOTTOMLEFT");
+                    left:SetWidth(7);
+                    local right = tab:CreateTexture(nil, "BACKGROUND");
+                    right:SetPoint("BOTTOMRIGHT");
+                    right:SetWidth(7);
+                    local middle = tab:CreateTexture(nil, "BACKGROUND");
+                    middle:SetPoint("BOTTOMLEFT", left, "BOTTOMRIGHT");
+                    middle:SetPoint("BOTTOMRIGHT", right, "BOTTOMLEFT");
+                    tab.wimTabParts = { left, middle, right };
+                end
+                if(not tab.wimHoverHooked) then
+                    -- Hover lights an inactive tab's label white, back
+                    -- to gold on leave; the active tab stays white.
+                    tab.wimHoverHooked = true;
+                    tab:HookScript("OnEnter", function(self)
+                        if(self.wimTabParts and self.wimTabParts[1]:IsShown()
+                                and win.TAB ~= self.index) then
+                            self.text:SetTextColor(1, 1, 1);
+                        end
+                    end);
+                    tab:HookScript("OnLeave", function(self)
+                        if(self.wimTabParts and self.wimTabParts[1]:IsShown()
+                                and win.TAB ~= self.index) then
+                            local r, g, b = _G.GameFontNormal:GetTextColor();
+                            self.text:SetTextColor(r, g, b);
+                        end
+                    end);
+                end
+                local prefix = active and "options_tab_active_" or "options_tab_";
+                local names = { "left", "middle", "right" };
+                -- Slightly under the art's authored 26/23, so the plates
+                -- keep a visible gap under the title bar.
+                local height = active and 24 or 21;
+                for p=1, 3 do
+                    tab.wimTabParts[p]:SetAtlas(prefix..names[p]);
+                    tab.wimTabParts[p]:SetHeight(height);
+                    tab.wimTabParts[p]:Show();
+                end
+                tab:SetHeight(height);
+                tab:SetWidth(tab.text:GetStringWidth() + 28);
+                tab:SetAlpha(1);
+                tab.bg:Hide();
+                if(active) then
+                    tab.text:SetTextColor(1, 1, 1);
+                else
+                    tab.text:SetTextColor(goldR, goldG, goldB);
+                end
+            else
+                if(tab.wimTabParts) then
+                    for p=1, 3 do tab.wimTabParts[p]:Hide(); end
+                end
+                tab.bg:Show();
+                tab:SetHeight(20);
+                tab:SetWidth(tab.text:GetStringWidth() + 16);
+                tab:SetAlpha(active and 1 or .5);
+                tab.text:SetTextColor(1, 1, 1);
+            end
+        end
+    end
 
     -- create nav
     win.nav = CreateFrame("Frame", nil, win);
@@ -974,6 +2046,9 @@ local function createHistoryViewer()
         -- radio ticks still track.
         DDM.UIDropDownMenu_SetSelectedValue(win.nav.user, value);
         DDM.UIDropDownMenu_SetText(win.nav.user, win.USERLABEL);
+        if(win.nav.userModern) then
+            win.nav.userModern:OverrideText(win.USERLABEL);
+        end
         DDM.CloseDropDownMenus();
     end
     win.nav.user.describeUser = describeUser;
@@ -1047,8 +2122,8 @@ local function createHistoryViewer()
                 for user in pairs(users) do noteCharacter(realm, user); end
             end
         end
-        if (_G.type(_G.WIM_HistoryArchive) == "table") then
-            for realm, users in pairs(_G.WIM_HistoryArchive) do
+        if (_G.type(_G.WIM3_HistoryArchive) == "table") then
+            for realm, users in pairs(_G.WIM3_HistoryArchive) do
                 if (_G.type(users) == "table") then
                     for user in pairs(users) do noteCharacter(realm, user); end
                 end
@@ -1109,8 +2184,7 @@ local function createHistoryViewer()
                   tooltipOnButton = true,
                   func = function()
                       DDM.CloseDropDownMenus();
-                      DDM.ToggleDropDownMenu(1, nil, win.nav.filters.menu,
-                                             win.nav.filters.header, 0, 0);
+                      win.nav.filters.header:Click();
                   end });
         end
 
@@ -1239,6 +2313,134 @@ local function createHistoryViewer()
             -- cannot be re-derived from win.USER alone.
             DDM.UIDropDownMenu_SetText(self, win.USERLABEL or self.describeUser(win.USER));
         end);
+    -- Modern selector: the same menu model rendered through the game's
+    -- current dropdown control (WowStyle1DropdownTemplate + the Menu
+    -- API), the way the Settings panel builds its dropdowns -- radio
+    -- rows, hover-expanding submenus and the chamfered menu frame. The
+    -- classic LibDropDownMenu selector above stays for skins that do
+    -- not opt in (hv.dropdown_style = "modern").
+    local canModernMenus = (_G.MenuUtil and _G.MenuUtil.CreateContextMenu) ~= nil;
+    if(canModernMenus) then
+        local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil, win.nav,
+            "WowStyle1DropdownTemplate");
+        if(ok and dropdown) then
+            win.nav.userModern = dropdown;
+            -- Seated over the navigation well's top corners, 2px past
+            -- its edges, so the control's chamfered corners become the
+            -- visual corners and only the dark panel fill sits behind
+            -- the cut. Placed flush against the well, the well's square
+            -- bevel corner shows past the chamfer as a bright notch.
+            dropdown:SetPoint("TOPLEFT", -2, 2);
+            dropdown:SetPoint("TOPRIGHT", 2, 2);
+            dropdown:SetHeight(26);
+            dropdown:Hide();
+            dropdown:SetupMenu(function(_, rootDescription)
+                local model = win.nav.user.getMenuModel(true);
+                local function isSelected(value)
+                    return win.USER == value and not win.USERSUBSET;
+                end
+                local function addFilteredMarker(parent)
+                    parent:CreateButton("|cff808080"..L["-- Results Filtered --"].."|r",
+                        function() win.nav.filters.header:Click(); end);
+                end
+                local function addEntries(parent, entries, labelOf, valueOf, bucketTag)
+                    if(#entries <= MAX_FLAT_ENTRIES) then
+                        for i=1, #entries do
+                            local v = valueOf(entries[i]);
+                            parent:CreateRadio(labelOf(entries[i]),
+                                isSelected, function() selectValue(v); end, v);
+                        end
+                        return;
+                    end
+                    local buckets = bucketize(entries, labelOf);
+                    for i=1, #buckets do
+                        local bucket = buckets[i];
+                        local subset = {};
+                        for j=1, #bucket.items do subset[bucket.items[j]] = true; end
+                        local bucketLabel = describeUser(bucketTag)
+                            .." ("..bucket.label..")";
+                        local sub = parent:CreateButton(bucket.label,
+                            function() selectValue(bucketTag, subset, bucketLabel); end);
+                        for j=1, #bucket.items do
+                            local v = valueOf(bucket.items[j]);
+                            sub:CreateRadio(labelOf(bucket.items[j]),
+                                isSelected, function() selectValue(v); end, v);
+                        end
+                    end
+                end
+                for _, realm in ipairs(model.realmOrder) do
+                    local sub = rootDescription:CreateButton(realm,
+                        function() selectValue(realm); end);
+                    addEntries(sub, model.realms[realm],
+                        function(c) return c; end,
+                        function(c) return realm.."/"..c; end,
+                        realm);
+                    if(model.filterActive and model.filtered.chars[realm]) then
+                        addFilteredMarker(sub);
+                    end
+                end
+                if(#model.bn > 0) then
+                    local sub = rootDescription:CreateButton(L["Battle.net Friends"],
+                        function() selectValue(BN_PSEUDO_REALM); end);
+                    addEntries(sub, model.bn,
+                        function(k) return k; end,
+                        function(k) return BN_PSEUDO_REALM.."/"..k; end,
+                        BN_PSEUDO_REALM);
+                    if(model.filterActive and model.filtered.bn) then
+                        addFilteredMarker(sub);
+                    end
+                end
+                if(model.filterActive and (model.filtered.realms
+                    or (model.filtered.bn and #model.bn == 0))) then
+                    addFilteredMarker(rootDescription);
+                end
+            end);
+        end
+    end
+
+    -- The filter-mode menu in the same modern form, opened from the
+    -- filters header as a context menu.
+    local function buildModernFilterMenu(_, rootDescription)
+        local mode = win.FILTERMODE or { kind = "days" };
+        rootDescription:CreateRadio(L["No Filter"],
+            function() return mode.kind ~= "relative" and mode.kind ~= "metric"; end,
+            function() win.SetFilterMode({ kind = "days" }); end);
+        local rel = rootDescription:CreateButton(L["Relative Dates"]);
+        for i=1, #RELATIVE_PRESETS do
+            local preset = RELATIVE_PRESETS[i];
+            rel:CreateRadio(L[preset.label],
+                function() return mode.kind == "relative"
+                    and mode.days == preset.days; end,
+                function() win.SetFilterMode({ kind = "relative",
+                    days = preset.days, label = preset.label }); end);
+        end
+        for i=1, #METRIC_ORDER do
+            local metric = METRIC_ORDER[i];
+            local sub = rootDescription:CreateButton(L[METRIC_LABELS[metric]]);
+            local presets = METRIC_PRESETS[metric];
+            local function addPreset(op, value)
+                local text = (op == "lt")
+                    and string.format(L["Fewer than %d"], value)
+                    or string.format(L["%d or more"], value);
+                sub:CreateRadio(text,
+                    function() return mode.kind == "metric"
+                        and mode.metric == metric
+                        and mode.op == op and mode.value == value; end,
+                    function() win.SetFilterMode({ kind = "metric",
+                        metric = metric, op = op, value = value }); end);
+            end
+            for j=1, #presets.gte do addPreset("gte", presets.gte[j]); end
+            for j=1, #presets.lt do addPreset("lt", presets.lt[j]); end
+        end
+        rootDescription:CreateCheckbox(L["Apply filter to character menus"],
+            function() return win.FILTERSELECTOR and true or false; end,
+            function()
+                win.FILTERSELECTOR = not win.FILTERSELECTOR;
+                win.nav.user._menuModel = nil;
+            end);
+    end
+    win.BuildModernFilterMenu = buildModernFilterMenu;
+
     win.nav.filters = CreateFrame("Frame", nil, win.nav);
     win.nav.filters:SetPoint("BOTTOMLEFT");
     win.nav.filters:SetPoint("BOTTOMRIGHT", -2, 0);
@@ -1269,6 +2471,9 @@ local function createHistoryViewer()
             label = L["No Filter"];
         end
         win.nav.filters.text:SetText(L["Filters"]..": "..label);
+        if(win.nav.filtersModern) then
+            win.nav.filtersModern:OverrideText(L["Filters"]..": "..label);
+        end
     end
 
     -- Cancel any in-flight render first. displayUpdate streams records
@@ -1386,7 +2591,12 @@ local function createHistoryViewer()
     win.nav.filters.header:SetPoint("TOPLEFT", win.nav.filters.border);
     win.nav.filters.header:SetPoint("BOTTOMRIGHT", win.nav.filters.border);
     win.nav.filters.header:SetScript("OnClick", function(self)
-            DDM.ToggleDropDownMenu(1, nil, win.nav.filters.menu, self, 0, 0);
+            local hv = GetSelectedSkin().history_viewer;
+            if(canModernMenus and hv and hv.dropdown_style == "modern") then
+                _G.MenuUtil.CreateContextMenu(self, win.BuildModernFilterMenu);
+            else
+                DDM.ToggleDropDownMenu(1, nil, win.nav.filters.menu, self, 0, 0);
+            end
         end);
     win.nav.filters.header:SetScript("OnEnter", function(self)
             if(db.showToolTips == true) then
@@ -1397,6 +2607,23 @@ local function createHistoryViewer()
     win.nav.filters.header:SetScript("OnLeave", function(self)
             _G.GameTooltip:Hide();
         end);
+
+    -- The filter-mode selector as the same modern dropdown control the
+    -- character selector uses, replacing the header band while the skin
+    -- opts in. It spans the same column the character dropdown does
+    -- (2px past the well edges, matching its chamfered silhouette).
+    if(canModernMenus and win.nav.userModern) then
+        local ok, dropdown = pcall(CreateFrame, "DropdownButton", nil,
+            win.nav.filters, "WowStyle1DropdownTemplate");
+        if(ok and dropdown) then
+            win.nav.filtersModern = dropdown;
+            dropdown:SetPoint("TOPLEFT", -2, 0);
+            dropdown:SetPoint("TOPRIGHT", 4, 0);
+            dropdown:SetHeight(26);
+            dropdown:Hide();
+            dropdown:SetupMenu(buildModernFilterMenu);
+        end
+    end
 
     win.nav.filters.scroll = CreateFrame("ScrollFrame", "WIM3_HistoryFilterListScroll", win.nav.filters, "FauxScrollFrameTemplate");
     win.nav.filters.scroll:SetPoint("TOPLEFT", 0, -22);
@@ -1412,11 +2639,10 @@ local function createHistoryViewer()
                     button:SetPoint("TOPRIGHT", win.nav.filters.scroll);
                 end
                 button:SetHeight(20);
-                button:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight" , "ADD");
-                button:GetHighlightTexture():SetVertexColor(.196, .388, .5);
 
                 button.text = button:CreateFontString(nil, "OVERLAY", "ChatFontNormal");
-                -- 3.16.14: reserve 18px on the right edge of the text frame for
+                win.SkinListButton(button);
+                -- Reserve 18px on the right edge of the text frame for
                 -- the delete X icon (mirrors the user-list row layout above so
                 -- the date label doesn't run under the X).
                 button.text:SetPoint("TOPLEFT");
@@ -1427,12 +2653,12 @@ local function createHistoryViewer()
                         self.filter = filter;
                         if(_G.type(filter) == "number") then
                             self.text:SetText("     "..date(L["_DateFormat"], filter));
-                            -- 3.16.14: date filter → show the delete X.
+                            -- Date filter → show the delete X.
                             if (self.delete) then self.delete:Show(); end
                         else
                             self.filter = "";
                             self.text:SetText("     "..filter);
-                            -- 3.16.14: "Show All" or other non-date filter →
+                            -- "Show All" or other non-date filter →
                             -- no per-day delete affordance. Deleting a whole
                             -- conversation is the user-list row's job.
                             if (self.delete) then self.delete:Hide(); end
@@ -1444,7 +2670,7 @@ local function createHistoryViewer()
                         win.UpdateDisplay();
                     end);
 
-                -- 3.16.14: per-date delete affordance. Removes every record
+                -- Per-date delete affordance. Removes every record
                 -- from the currently-selected conversation (win.CONVO) whose
                 -- timestamp falls on the clicked day, scoped to the currently-
                 -- selected USER (BN consolidated view → all realms/characters;
@@ -1665,10 +2891,9 @@ local function createHistoryViewer()
                     button:SetPoint("TOPRIGHT", win.nav.userList.scroll);
                 end
                 button:SetHeight(20);
-                button:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestLogTitleHighlight" , "ADD");
-                button:GetHighlightTexture():SetVertexColor(.196, .388, .5);
 
                 button.text = button:CreateFontString(nil, "OVERLAY", "ChatFontNormal");
+                win.SkinListButton(button);
                 button.text:SetPoint("TOPLEFT");
                 button.text:SetPoint("BOTTOMRIGHT", -18, 0);
                 button.text:SetJustifyH("LEFT");
@@ -1689,7 +2914,10 @@ local function createHistoryViewer()
                         local original, extra, color = user, "";
                         local gmTag
                         user, gmTag = string.match(original, "([^*]+)(*?)$");
-                        color = gmTag == "*" and constants.classes[L["Game Master"]].color or "ffffff";
+                        -- Plain rows take no embedded color: an escape code
+                        -- would override the skin's row font color (and the
+                        -- selected row's), which drive the text instead.
+                        color = gmTag == "*" and constants.classes[L["Game Master"]].color or nil;
                         if(string.match(original, "^*")) then
                             extra = " |TInterface\\AddOns\\WIM\\Skins\\Default\\minimap.blp:20:20:0:0|t";
                             color = "fff569";
@@ -1699,7 +2927,12 @@ local function createHistoryViewer()
                        		return
                         end
                         self.user = user;
-                        self.text:SetText("     |cff"..color..user.."|r"..extra..(gmTag == "*" and " |TInterface\\ChatFrame\\UI-ChatIcon-Blizz.blp:0:2:0:0|t" or ""));
+                        local suffix = extra..(gmTag == "*" and " |TInterface\\ChatFrame\\UI-ChatIcon-Blizz.blp:0:2:0:0|t" or "");
+                        if(color) then
+                            self.text:SetText("     |cff"..color..user.."|r"..suffix);
+                        else
+                            self.text:SetText("     "..user..suffix);
+                        end
                         if(user == win.SELECT) then
                             self:Click();
                         end
@@ -1709,8 +2942,7 @@ local function createHistoryViewer()
                         -- row: it opens the Filters menu instead of selecting
                         -- a conversation.
                         if (not self.user) then
-                            DDM.ToggleDropDownMenu(1, nil, win.nav.filters.menu,
-                                                   win.nav.filters.header, 0, 0);
+                            win.nav.filters.header:Click();
                             return;
                         end
                         win:SelectConvo(self.user);
@@ -1742,7 +2974,7 @@ local function createHistoryViewer()
                         local _bnKey = (_bnHandle ~= "" and _bnHandle) or self:GetParent().user;
                         local _popupText;
                         if (_isBN) then
-                            -- 3.16.14: extra-explicit warning, because the
+                            -- Extra-explicit warning, because the
                             -- BN-friend view is a cross-realm aggregation and
                             -- the user might not realize the delete is
                             -- account-wide.
@@ -1766,21 +2998,20 @@ local function createHistoryViewer()
                             button2 = L["No"],
                             OnAccept = function()
                                 local realm, character = string.match(win.USER, "^([^/]+)/?(.*)$");
-                                -- 3.16.14: BN-friend consolidated delete.
+                                -- BN-friend consolidated delete.
                                 -- Walks every (realm, character) slot and
                                 -- nils the matching BattleTag's conversation.
                                 -- The active character's splice slot is still
-                                -- preserved per the 3.16.14 invariant. In the
+                                -- preserved (emptied, never nilled). In the
                                 -- section-wide view the tag comes from the
                                 -- clicked row (_bnKey), not from win.USER.
                                 if (realm == BN_PSEUDO_REALM) then
                                     local bnKey = _bnKey;
-                                    -- 3.16.14: Collect the slots that will
-                                    -- become empty BEFORE mutating, since
-                                    -- pairs() over a table being mutated is
-                                    -- only well-defined for nilling existing
-                                    -- keys at the CURRENT position. To stay
-                                    -- safely within the spec, we do a
+                                    -- Collect the slots that will become
+                                    -- empty before mutating. pairs() over
+                                    -- a table being mutated is only
+                                    -- well-defined for nilling the key at
+                                    -- the current position, so this is a
                                     -- gather-then-delete two-pass walk.
                                     local emptiedChars = {};
                                     local emptiedRealms = {};
@@ -1819,7 +3050,7 @@ local function createHistoryViewer()
                                 elseif(realm and character and history[realm] and history[realm][character]) then
                                     history[realm][character][self:GetParent().user] = nil;
                                     MarkHistoryDirty(realm, character, self:GetParent().user);
-                                    -- 3.16.14: preserve the active character's
+                                    -- Preserve the active character's
                                     -- splice slot even when fully emptied; see
                                     -- the matching note in deleteOldHistory().
                                     if(isEmptyTable(history[realm][character])
@@ -1942,7 +3173,7 @@ local function createHistoryViewer()
                 win.SEARCHLIST[key] = nil;
             end
             local realm, character = string.match(win.USER, "^([^/]+)/?(.*)$");
-            -- 3.16.14: BN-friend consolidated view. Search across all
+            -- BN-friend consolidated view. Search across all
             -- (realm, character) slots for records under the chosen BattleTag.
             -- When the whole section is selected (no specific friend in
             -- win.USER), search every BattleTag -- the realm-wide analogue.
@@ -2067,6 +3298,9 @@ local function createHistoryViewer()
                         win.content.tabs[i]:SetAlpha(.5);
                     end
                 end
+                if(win.RefreshTabVisuals) then
+                    win.RefreshTabVisuals();
+                end
                 win:UpdateDisplay();
             end);
             table.insert(self.tabs, tab);
@@ -2080,6 +3314,9 @@ local function createHistoryViewer()
     win.content.chatFrame:SetPoint("TOPLEFT", 4, -4);
     win.content.chatFrame:SetPoint("BOTTOMRIGHT", -30, 4);
     win.content.chatFrame:SetFontObject("ChatFontNormal");
+    -- The message areas follow WIM's font setting like the chat
+    -- windows' display areas do (SetWidgetFont honors this flag).
+    win.content.chatFrame._allowCustomFont = true;
     win.content.chatFrame:EnableMouse(true);
     win.content.chatFrame:EnableMouseWheel(true);
     win.content.chatFrame:SetJustifyH("LEFT");
@@ -2181,6 +3418,7 @@ local function createHistoryViewer()
     win.content.textFrame.text:SetWidth(win.content.textFrame:GetWidth());
     win.content.textFrame.text:SetHeight(200);
     win.content.textFrame.text:SetAutoFocus(false);
+    win.content.textFrame.text._allowCustomFont = true;
     win.content.textFrame.text:SetScript("OnEscapePressed", function(self) self:ClearFocus() end);
     win.content.textFrame.text:SetScript("OnTextChanged", function(self)
             win.content.textFrame:UpdateScrollChildRect();
@@ -2297,7 +3535,7 @@ local function createHistoryViewer()
             EnsureHistoryRealmLoaded(_r);
         end
         local realm, character = string.match(win.USER, "^([^/]+)/?(.*)$");
-        -- 3.16.14: BN-friend consolidated view. Walk every (realm, character)
+        -- BN-friend consolidated view. Walk every (realm, character)
         -- slot in history and pull out every record from the conversation
         -- keyed by this BattleTag.
         if (realm == BN_PSEUDO_REALM) then
@@ -2367,7 +3605,7 @@ local function createHistoryViewer()
         -- filtered rather than as missing history.
         local ctx = listFilterContext(win);
         local hiddenByFilter = false;
-        -- 3.16.14: BN-friend consolidated view. The "realm" is the BN pseudo
+        -- BN-friend consolidated view. The "realm" is the BN pseudo
         -- and the "character" half is actually the BattleTag/RealID.
         if (realm == BN_PSEUDO_REALM and character == "") then
             -- The whole section was selected ("Battle.net Friends" at the top
@@ -2500,6 +3738,8 @@ local function createHistoryViewer()
             win.displayUpdate:Hide();
         end);
 
+    win.ApplySkin();
+
     win.content.tabs[1]:Click();
 
     return win;
@@ -2507,6 +3747,13 @@ end
 
 
 local HistoryViewer;
+
+-- The viewer lives in UISpecialFrames so ESC closes it. The Settings
+-- panel runs CloseAllWindows() on its transitions and takes the viewer
+-- with it. That is the standard behavior for every ESC-closable frame,
+-- so the viewer stays closed; restoring it over the opening panel would
+-- be a non-standard interaction.
+
 local function createDisplayUpdate()
     -- displayUpdate loads messages into the correct content frames avoiding lag from system ops.
     local displayUpdate = CreateFrame("Frame");
@@ -2515,13 +3762,12 @@ local function createDisplayUpdate()
     displayUpdate.tmpTable = {};
     displayUpdate.Process = function(self)
             self.i = self.i or 1;
-            -- 3.16.14: this used to recurse via `self:Process()` to skip
-            -- filtered-out records, which blew Lua's call stack (max depth
-            -- around 200) on large datasets where many records in a row fall
-            -- outside the active filter (e.g. realm-wide view with a date
-            -- filter). Converted to an iterative skip loop. Functionally
-            -- equivalent, but bounded by the loop budget instead of the
-            -- call stack.
+            -- Skipping filtered-out records must be a loop, not recursion
+            -- through self:Process(). With a narrow filter over a large
+            -- data set (for example a realm-wide view with a date filter),
+            -- thousands of consecutive records can be skipped, and
+            -- recursing once per skipped record overflows Lua's call
+            -- stack.
             while (true) do
                 if (not self.curList or not self.curList[self.i]) then
                     -- End of list: final progress update, then hide.
@@ -2771,6 +4017,11 @@ function ShowHistoryViewer(user)
     HistoryViewer.displayUpdate = HistoryViewer.displayUpdate or createDisplayUpdate();
 
     if(user) then
+        -- Show first. OnShow runs its own UpdateUserList, and with the
+        -- targeted selection already consumed, that pass would auto-click
+        -- the first row and replace the conversation this call was asked
+        -- to open. Targeting after the show avoids that.
+        HistoryViewer:Show();
         HistoryViewer.USER = env.realm.."/"..env.character;
         HistoryViewer.USERSUBSET = nil;
         HistoryViewer.USERLABEL = nil;
@@ -2779,13 +4030,19 @@ function ShowHistoryViewer(user)
         HistoryViewer.nav:Show();
         HistoryViewer.UpdateUserList();
         HistoryViewer:SelectConvo(user);
- --       DisplayTutorial(L["WIM History Viewer"], L["WIM History Viewer can be accessed any time by typing:"].." \n|cff69ccf0/wim history|r");
+        return;
     end
     HistoryViewer:Show();
-	if not exists and not user then --force update on first show without user
+	if not exists then --force update on first show without user
 		HistoryViewer:Hide();
 		HistoryViewer:Show();
 	end
+end
+
+function History:OnSkinLoaded()
+    if(HistoryViewer) then
+        HistoryViewer.ApplySkin();
+    end
 end
 
 RegisterSlashCommand("history", function() ShowHistoryViewer(); end, L["Display history viewer."])

@@ -25,4 +25,39 @@
             <OnLoad method="OnLoad"/>
         </Scripts>
     </Frame>
+
+    <Frame name="WIM3SettingsFilterListTemplate" virtual="true" mixin="WIM3SettingsElementMixin">
+        <Size y="250"/>
+        <Scripts>
+            <OnLoad method="OnLoad"/>
+        </Scripts>
+    </Frame>
+
+    <Frame name="WIM3SettingsChannelListTemplate" virtual="true" mixin="WIM3SettingsElementMixin">
+        <Size y="216"/>
+        <Scripts>
+            <OnLoad method="OnLoad"/>
+        </Scripts>
+    </Frame>
+
+    <Frame name="WIM3SettingsBugReportTemplate" virtual="true" mixin="WIM3SettingsElementMixin">
+        <Size y="104"/>
+        <Scripts>
+            <OnLoad method="OnLoad"/>
+        </Scripts>
+    </Frame>
+
+    <Frame name="WIM3SettingsCreditsTemplate" virtual="true" mixin="WIM3SettingsElementMixin">
+        <Size y="300"/>
+        <Scripts>
+            <OnLoad method="OnLoad"/>
+        </Scripts>
+    </Frame>
+
+    <Frame name="WIM3SettingsNoteTemplate" virtual="true" mixin="WIM3SettingsElementMixin">
+        <Size y="64"/>
+        <Scripts>
+            <OnLoad method="OnLoad"/>
+        </Scripts>
+    </Frame>
 </Ui>

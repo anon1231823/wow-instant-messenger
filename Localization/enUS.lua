@@ -425,11 +425,11 @@ WIM.AddLocale("enUS", {
 	["Red"] = true,
 	["Yellow"] = true,
 
-	-- 3.16.14: Battle.net friend consolidation (History Viewer)
+	-- Battle.net friend consolidation (History Viewer)
 	["Battle.net Friends"] = true,
 	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = true,
 
-	-- 3.16.14: Per-date deletion from the History Viewer filter list
+	-- Per-date deletion from the History Viewer filter list
 	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = true,
 	["Are you sure you want to delete the %s history for %s across every character on %s?"] = true,
 	["Are you sure you want to delete the %s history for %s on %s?"] = true,
