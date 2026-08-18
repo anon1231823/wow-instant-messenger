@@ -4,6 +4,8 @@ local WIM = WIM;
 local _G = _G;
 local table = table;
 local pairs = pairs;
+local ipairs = ipairs;
+local tostring = tostring;
 local string = string;
 local math = math;
 local debugstack = debugstack;
@@ -45,8 +47,16 @@ db_defaults.modernTheme = {
     chatFrame = "rock",
     chatPanel = "darkmarble",
     chatCutout = false,
-    -- Which roleplay profile fields replace the stock display on
-    -- whisper windows; empty means the stock display, untouched.
+    -- The typed message can wrap onto multiple lines. The row grows
+    -- with the message. A line limit is optional.
+    inputWrap = false,
+    inputWrapLimit = false,
+    inputWrapLines = 2,
+    -- Roleplay profile integration. rpEnabled is the master switch and
+    -- also controls the Open Profile shortcut. rpFields selects which
+    -- profile fields replace the default display on whisper windows.
+    -- When rpFields is empty, the default display stays unchanged.
+    rpEnabled = false,
     rpFields = {},
 };
 
@@ -499,18 +509,70 @@ local function buildWindowChrome(obj)
         input:SetPoint("TOPLEFT", msg_box, "TOPLEFT", 0, 0);
         input:SetPoint("BOTTOMRIGHT", msg_box, "BOTTOMRIGHT", 0, 0);
         input:SetFrameLevel(obj:GetFrameLevel());
-        local left = input:CreateTexture(nil, "BACKGROUND");
-        left:SetAtlas("common-search-border-left");
-        left:SetSize(8, 20);
-        left:SetPoint("LEFT", -5, 0);
-        local right = input:CreateTexture(nil, "BACKGROUND");
-        right:SetAtlas("common-search-border-right");
-        right:SetSize(8, 20);
-        right:SetPoint("RIGHT", 0, 0);
-        local middle = input:CreateTexture(nil, "BACKGROUND");
-        middle:SetAtlas("common-search-border-middle");
-        middle:SetPoint("TOPLEFT", left, "TOPRIGHT");
-        middle:SetPoint("BOTTOMRIGHT", right, "BOTTOMLEFT");
+        input.capLeft = input:CreateTexture(nil, "BACKGROUND");
+        input.capLeft:SetAtlas("common-search-border-left");
+        input.capLeft:SetSize(8, 20);
+        input.capLeft:SetPoint("LEFT", -5, 0);
+        input.capRight = input:CreateTexture(nil, "BACKGROUND");
+        input.capRight:SetAtlas("common-search-border-right");
+        input.capRight:SetSize(8, 20);
+        input.capRight:SetPoint("RIGHT", 5, 0);
+        input.capMiddle = input:CreateTexture(nil, "BACKGROUND");
+        input.capMiddle:SetAtlas("common-search-border-middle");
+        input.capMiddle:SetPoint("TOPLEFT", input.capLeft, "TOPRIGHT");
+        input.capMiddle:SetPoint("BOTTOMRIGHT", input.capRight, "BOTTOMLEFT");
+        -- Wrap-mode border: the same search-border art, cut into a
+        -- nine-piece grid so it also stretches vertically. Texture
+        -- coordinates apply within an atlas member, so the pieces can
+        -- be sampled directly: the caps' top and bottom 40% become the
+        -- corners, their middle band becomes the side edges, and the
+        -- tube's bands become the top edge, bottom edge, and fill.
+        local grid = {};
+        local function slice(atlas, top, bottom)
+            local tex = input:CreateTexture(nil, "BACKGROUND");
+            tex:SetAtlas(atlas);
+            tex:SetTexCoord(0, 1, top, bottom);
+            table.insert(grid, tex);
+            return tex;
+        end
+        -- On the single-line border the caps sit 3px inside the row's
+        -- vertical extent. The grid keeps the same inset so the art
+        -- does not move when the mode changes.
+        local tl = slice("common-search-border-left", 0, 0.4);
+        tl:SetSize(8, 8);
+        tl:SetPoint("TOPLEFT", -5, -3);
+        local bl = slice("common-search-border-left", 0.6, 1);
+        bl:SetSize(8, 8);
+        bl:SetPoint("BOTTOMLEFT", -5, 3);
+        local edgeL = slice("common-search-border-left", 0.45, 0.55);
+        edgeL:SetPoint("TOPLEFT", tl, "BOTTOMLEFT");
+        edgeL:SetPoint("BOTTOMRIGHT", bl, "TOPRIGHT");
+        local tr = slice("common-search-border-right", 0, 0.4);
+        tr:SetSize(8, 8);
+        tr:SetPoint("TOPRIGHT", 5, -3);
+        local br = slice("common-search-border-right", 0.6, 1);
+        br:SetSize(8, 8);
+        br:SetPoint("BOTTOMRIGHT", 5, 3);
+        local edgeR = slice("common-search-border-right", 0.45, 0.55);
+        edgeR:SetPoint("TOPLEFT", tr, "BOTTOMLEFT");
+        edgeR:SetPoint("BOTTOMRIGHT", br, "TOPRIGHT");
+        local edgeT = slice("common-search-border-middle", 0, 0.4);
+        edgeT:SetPoint("TOPLEFT", tl, "TOPRIGHT");
+        edgeT:SetPoint("BOTTOMRIGHT", tr, "BOTTOMLEFT");
+        local edgeB = slice("common-search-border-middle", 0.6, 1);
+        edgeB:SetPoint("TOPLEFT", bl, "TOPRIGHT");
+        edgeB:SetPoint("BOTTOMRIGHT", br, "BOTTOMLEFT");
+        local center = slice("common-search-border-middle", 0.45, 0.55);
+        center:SetPoint("TOPLEFT", edgeT, "BOTTOMLEFT");
+        center:SetPoint("BOTTOMRIGHT", edgeB, "TOPRIGHT");
+        for i=1, #grid do grid[i]:Hide(); end
+        input.multi = grid;
+        -- Character counter, on its own strip above the row. The game
+        -- limits chat messages to 255 characters.
+        input.counter = input:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall");
+        -- Centered vertically in the strip between the row and the
+        -- message area (strip height 15, counter height about 10).
+        input.counter:SetPoint("BOTTOMRIGHT", input, "TOPRIGHT", 2, 0);
         chrome.input = input;
     end
 
@@ -669,6 +731,90 @@ end
 -- skin baseline the theme pass captured.
 local HEADER_MIN_FONT = 10;
 
+local INPUT_LEFT_PULL = 12;
+-- The character counter sits on its own strip between the input row
+-- and the message area; text never shares the row with it. The window
+-- height increases by the strip height plus any wrap-mode growth, so
+-- the message area size never changes with the theme or the mode. The
+-- input row keeps the skin's bottom offset; with the art's inset this
+-- gives the same margin below the row as beside it.
+local WRAP_HEADROOM = 12;
+
+-- The wrap mode's viewport is a plain clipping frame, scrolled by
+-- anchoring the box at a negative offset (the modern scroll boxes'
+-- construction) -- ScrollFrame scroll children render through a path
+-- that ignores clipping on this client, state-dump verified.
+-- The REAL rendered line height: the font's nominal height comes up
+-- short of it (14 vs 14.22 measured), and budgeting with the nominal
+-- value leaves the view fractionally smaller than its content --
+-- endless sub-pixel scroll corrections that read as per-character
+-- jitter and mid-glyph clipping.
+local function boxLineHeight(obj, box)
+    local inner = obj.wimBoxInnerText;
+    if(not inner) then
+        local regions = { box:GetRegions() };
+        for i=1, #regions do
+            if(regions[i].GetObjectType
+                    and regions[i]:GetObjectType() == "FontString") then
+                obj.wimBoxInnerText = regions[i];
+                inner = regions[i];
+                break;
+            end
+        end
+    end
+    if(inner and inner.GetLineHeight) then
+        local h = inner:GetLineHeight();
+        if(h and h > 0) then return h; end
+    end
+    local _, fontHeight = box:GetFont();
+    return fontHeight or 14;
+end
+
+local function setInputScroll(obj, offset)
+    local input = obj.wimChrome and obj.wimChrome.input;
+    local viewport = input and input.scroll;
+    local box = obj.widgets and obj.widgets.msg_box;
+    if(not (viewport and box)) then return; end
+    local range = (box:GetHeight() or 0) - (viewport:GetHeight() or 0);
+    if(range < 0) then range = 0; end
+    if(not offset or offset < 0) then offset = 0; end
+    if(offset > range) then offset = range; end
+    local current = obj.wimInputScrollOfs;
+    obj.wimInputScrollOfs = offset;
+    if(current ~= nil and math.abs(current - offset) < 0.25) then
+        return;
+    end
+    viewport:SetVerticalScroll(offset);
+end
+
+local function settleBorrow(obj, target)
+    obj.wimBoxExtra = target;
+    local shown = obj.wimBorrowShown or 0;
+    if(target ~= shown) then
+        obj.wimBorrowShown = target;
+        obj:SetHeight((obj:GetHeight() or 0) + (target - shown));
+    end
+end
+
+-- The skin's own widget point data is the layout baseline. Reading it
+-- fresh for every adjustment, instead of capturing live points, means
+-- repeated layouts can never drift. relativeTo "window" resolves to
+-- the window itself; anything else resolves to a sibling widget.
+local function skinWidgetPoints(name)
+    local widgetSkin = GetSelectedSkin().message_window.widgets[name];
+    return widgetSkin and widgetSkin.points;
+end
+
+local function resolveRelativeTo(obj, relativeTo)
+    if(type(relativeTo) == "string") then
+        if(string.lower(relativeTo) == "window") then
+            return obj;
+        end
+        return obj.widgets[relativeTo] or obj;
+    end
+    return relativeTo or obj;
+end
+
 local function fitHeaderLine(fs, base, avail, wraps)
     if(not (fs and base) or not avail or avail <= 0) then return; end
     fs:SetFont(base.path, base.size, base.flags);
@@ -708,11 +854,17 @@ function LayoutThemedHeader(obj)
     local infoBottom = -28;
     if(info and obj.wimInfoBaseFont) then
         info:ClearAllPoints();
+        -- Use the same span as the title above, so both center on the
+        -- same axis.
         info:SetPoint("TOPLEFT", obj, "TOPLEFT", 56, -28);
-        info:SetPoint("TOPRIGHT", obj, "TOPRIGHT", -8, -28);
+        info:SetPoint("TOPRIGHT", obj, "TOPRIGHT", -27, -28);
         info:SetJustifyH("CENTER");
         info:SetWordWrap(true);
         info:SetNonSpaceWrap(true);
+        -- Spacing between the full-title row and the race/class row.
+        -- Without it, descenders and apostrophes of adjacent rows
+        -- touch.
+        info:SetSpacing(3);
         fitHeaderLine(info, obj.wimInfoBaseFont, info:GetWidth(), true);
         infoBottom = -28 - (info:GetStringHeight() or 0);
     end
@@ -720,13 +872,18 @@ function LayoutThemedHeader(obj)
     -- The well (display top +6) starts below the circle or below the
     -- details text, whichever reaches lower. It never rises above the
     -- skin's own baseline.
-    local basePoints = obj.wimDisplayBasePoints;
+    local basePoints = skinWidgetPoints("chat_display");
     local display = widgets.chat_display;
     local headerHeight = 54;
     if(display and basePoints) then
         local wellTop = infoBottom - 4;
         if(chrome.hasPortrait and wellTop > -54) then wellTop = -54; end
-        local baseTop = obj.wimDisplayBaseTop;
+        local baseTop;
+        for i=1, #basePoints do
+            if(string.find(basePoints[i][1], "TOP")) then
+                baseTop = basePoints[i][5] or 0;
+            end
+        end
         local deltaY = 0;
         local desiredTop = wellTop - 6;
         if(baseTop) then
@@ -739,10 +896,15 @@ function LayoutThemedHeader(obj)
             local p = basePoints[i];
             local x = p[4] or 0;
             local y = p[5] or 0;
-            -- The right edge pulls in for the in-well scrollbar.
+            -- The right edge pulls in for the in-well scrollbar. The
+            -- left edge moves toward the frame rail with the input
+            -- row. The bottom rises by the extra height the wrap mode
+            -- gave the input box.
             if(string.find(p[1], "RIGHT")) then x = x - 18; end
-            if(string.find(p[1], "TOP")) then y = y + deltaY; end
-            display:SetPoint(p[1], p[2], p[3], x, y);
+            if(string.find(p[1], "LEFT")) then x = x - 12; end
+            if(string.find(p[1], "TOP")) then y = y + deltaY;
+            elseif(string.find(p[1], "BOTTOM")) then y = y + (obj.wimBoxExtra or 0); end
+            display:SetPoint(p[1], resolveRelativeTo(obj, p[2]), p[3], x, y);
         end
     end
 
@@ -764,7 +926,16 @@ function LayoutThemedHeader(obj)
         end
     end
     local skinWindow = GetSelectedSkin().message_window;
-    local minHeight = headerHeight + math.max(column, 60) + 44;
+    -- In wrap mode the box's content height has no limit. The
+    -- scroller's view height is the row's real footprint.
+    local inputRow = 26;
+    if(obj.wimBoxInScroll) then
+        inputRow = obj.wimInputRowH or inputRow;
+    elseif(widgets.msg_box) then
+        inputRow = widgets.msg_box:GetHeight() or inputRow;
+    end
+    local inputHeight = inputRow + 30;
+    local minHeight = headerHeight + math.max(column, 60) + inputHeight;
     if(skinWindow.min_height and minHeight < skinWindow.min_height) then
         minHeight = skinWindow.min_height;
     end
@@ -774,9 +945,394 @@ function LayoutThemedHeader(obj)
     elseif(obj.SetMinResize) then
         obj:SetMinResize(minWidth, minHeight);
     end
-    if((obj:GetHeight() or 0) < minHeight - 0.5) then
-        obj:SetHeight(minHeight);
+end
+
+-- Themed input row. The row is pulled toward the frame's left edge
+-- together with the message well and carries a character counter (the
+-- game limits chat messages to 255 characters). An optional wrap mode
+-- turns the box multi-line.
+-- This mirrors the whisper engine's word-boundary splitter, including
+-- its at-the-limit break for words longer than the limit. A message
+-- over the limit is not an error; it is sent as this many messages.
+local function estimateMessageCount(text, limit)
+    local count, current = 0, 0;
+    for word in string.gmatch(text, "%S+") do
+        local length = #word;
+        while(length >= limit) do
+            if(current > 0) then
+                count = count + 1;
+                current = 0;
+            end
+            count = count + 1;
+            length = length - (limit - 1);
+        end
+        if(length > 0) then
+            if(current == 0 or current + length < limit) then
+                current = current + length + 1;
+            else
+                count = count + 1;
+                current = length + 1;
+            end
+        end
     end
+    if(current > 0) then count = count + 1; end
+    return count;
+end
+
+function UpdateThemedInputDecor(obj)
+    local chrome = obj.wimChrome;
+    local widgets = obj.widgets;
+    if(not (chrome and chrome:IsShown() and chrome.input and widgets)) then return; end
+    local input = chrome.input;
+    local box = widgets.msg_box;
+    if(not (box and input.counter)) then return; end
+
+    local text = box:GetText() or "";
+    local count = #text;
+    -- The cursor-change event fires every frame while a wrapped box
+    -- has focus (probe-observed); skip the repaint when nothing it
+    -- depends on has changed.
+    local stamp = count.."|"..tostring(obj.wimInputScrollOfs).."|"
+        ..tostring(box.IsMultiLine and box:IsMultiLine());
+    if(obj.wimDecorStamp == stamp) then
+        return;
+    end
+    obj.wimDecorStamp = stamp;
+    -- The limits the whisper engine splits against: 255 characters
+    -- for regular whispers, 800 for Battle.net.
+    local limit = obj.isBN and 800 or 255;
+    if(count == 0) then
+        input.counter:SetText("-/"..limit);
+        input.counter:SetTextColor(0.6, 0.6, 0.6);
+    else
+        local messages = estimateMessageCount(text, limit);
+        input.counter:SetText(count.."/"..limit.." ("..messages..")");
+        if(messages > 1) then
+            input.counter:SetTextColor(1, 0.65, 0.25);
+        else
+            input.counter:SetTextColor(0.6, 0.6, 0.6);
+        end
+    end
+
+    -- Wrap mode grows the row with its content. The scroller's height
+    -- follows the number of rendered text lines, not the box's content
+    -- height: the caret moves to the next line a character or two
+    -- before the text wraps, so the content height oscillates at the
+    -- wrap point while the line count stays stable. The window grows
+    -- or shrinks by the same amount below the message area, whose size
+    -- never changes. Past the optional line cap, the row stops growing
+    -- and the scroller keeps the cursor's line in view.
+    if(obj.wimBoxInScroll and input.scroll) then
+        -- Self-healing. If code outside the theme re-anchored the box
+        -- away from its scroller, the box becomes unclipped and
+        -- unscrollable and its text overflows the row. Re-run the
+        -- layout before measuring; it re-seats the anchors.
+        local _, anchoredTo = box:GetPoint(1);
+        if(anchoredTo ~= input.scroll) then
+            LayoutThemedInput(obj);
+            return;
+        end
+        local lineHeight = boxLineHeight(obj, box);
+        local inner = obj.wimBoxInnerText;
+        local lines;
+        if(inner and inner.GetNumLines) then
+            lines = inner:GetNumLines() or 1;
+        else
+            lines = math.floor(((box:GetHeight() or lineHeight) + 2) / lineHeight);
+        end
+        if(lines < 1) then lines = 1; end
+        local theme = db.modernTheme or {};
+        if(theme.inputWrapLimit) then
+            local capLines = theme.inputWrapLines or 2;
+            if(capLines < 1) then capLines = 1; end
+            if(capLines > 6) then capLines = 6; end
+            if(lines > capLines) then lines = capLines; end
+        end
+        -- One REAL line height per line plus the viewport margins and
+        -- box insets (4+2 each side); one line lands on the
+        -- single-line row's 26.
+        local rowHeight = lines * lineHeight + 12;
+        if(rowHeight < 26) then rowHeight = 26; end
+        if(rowHeight ~= obj.wimInputRowH) then
+            obj.wimInputRowH = rowHeight;
+            input:SetHeight(rowHeight);
+        end
+        -- wimBorrowShown records how much extra height the window
+        -- currently holds for the themed input. Every function that
+        -- changes this height (the growth here, the UpdateProps reset,
+        -- the mode exit) reads and updates the same record. One value
+        -- controls the height, so the writers cannot disagree.
+        local target = (rowHeight - 26) + WRAP_HEADROOM;
+        if(target ~= (obj.wimBorrowShown or 0)) then
+            settleBorrow(obj, target);
+            LayoutThemedHeader(obj);
+        else
+            obj.wimBoxExtra = target;
+        end
+    end
+end
+
+-- Undoes the wrap mode. The box leaves the scroller, becomes
+-- single-line again, and takes the skin's own anchors (pulled left
+-- while the theme stays active). This is also the restore path for
+-- classic skins.
+function RestoreThemedInput(obj, keepLeftPull)
+    local box = obj.widgets and obj.widgets.msg_box;
+    if(not box) then return; end
+    local chrome = obj.wimChrome;
+    local scroll = chrome and chrome.input and chrome.input.scroll;
+    if(obj.wimBoxInScroll) then
+        obj.wimBoxInScroll = nil;
+        obj.wimInputScrollOfs = 0;
+        box.GetParent = nil;
+        if(scroll) then
+            scroll:Hide();
+        end
+        box:SetParent(obj);
+        box:SetFrameLevel(obj:GetFrameLevel() + 1);
+    end
+    box:SetMultiLine(false);
+    -- The client anchors the caret itself on single-line boxes; the
+    -- wrap mode's manual anchoring must not linger under it.
+    if(obj.wimBoxCaret) then
+        obj.wimBoxCaret:ClearAllPoints();
+    end
+    obj.wimInputRowH = nil;
+    local points = skinWidgetPoints("msg_box");
+    if(points) then
+        -- Themed (keepLeftPull): symmetric side offsets from the frame
+        -- edges. Classic: the skin's own points, unchanged.
+        box:ClearAllPoints();
+        for i=1, #points do
+            local p = points[i];
+            local x = p[4] or 0;
+            if(keepLeftPull) then
+                if(string.find(p[1], "LEFT")) then x = x - INPUT_LEFT_PULL; end
+                if(string.find(p[1], "RIGHT")) then x = x - 2; end
+            end
+            box:SetPoint(p[1], resolveRelativeTo(obj, p[2]), p[3], x, p[5]);
+        end
+    end
+    if(keepLeftPull) then
+        settleBorrow(obj, WRAP_HEADROOM);
+    else
+        settleBorrow(obj, 0);
+        obj.wimBoxThemed = nil;
+        if(obj.wimBoxBaseInsets) then
+            local insets = obj.wimBoxBaseInsets;
+            box:SetTextInsets(insets[1], insets[2], insets[3], insets[4]);
+        end
+    end
+end
+
+function LayoutThemedInput(obj)
+    local chrome = obj.wimChrome;
+    local widgets = obj.widgets;
+    if(not (chrome and chrome:IsShown() and chrome.input and widgets)) then return; end
+    local box = widgets.msg_box;
+    local points = skinWidgetPoints("msg_box");
+    if(not (box and points)) then return; end
+    local input = chrome.input;
+    local theme = db.modernTheme or {};
+    local wraps = theme.inputWrap and true or false;
+
+    obj.wimBoxThemed = true;
+    input.capLeft:SetShown(not wraps);
+    input.capRight:SetShown(not wraps);
+    input.capMiddle:SetShown(not wraps);
+    for i=1, #input.multi do
+        input.multi[i]:SetShown(wraps);
+    end
+
+    if(wraps) then
+        -- A multi-line box must live in a scroller. Anchored on both
+        -- edges it fights its own content-driven height, and only a
+        -- scroller can keep the cursor's line in view.
+        if(not input.scroll) then
+            -- A real ScrollFrame: the client anchors the caret itself
+            -- when the box is a genuine scroll child (it never does
+            -- for a manually offset box, probe-verified), and the
+            -- scroll translation comes with it.
+            local viewport = CreateFrame("ScrollFrame", nil, obj);
+            viewport:SetFrameLevel(obj:GetFrameLevel() + 1);
+            viewport.parentWindow = obj;
+            if(viewport.SetClipsChildren) then
+                viewport:SetClipsChildren(true);
+            end
+            viewport:EnableMouse(true);
+            viewport:SetScript("OnMouseDown", function()
+                local target = obj.widgets and obj.widgets.msg_box;
+                if(target) then
+                    target:SetFocus();
+                    target:SetCursorPosition(#(target:GetText() or ""));
+                end
+            end);
+            viewport:EnableMouseWheel(true);
+            viewport:SetScript("OnMouseWheel", function(self, delta)
+                local target = obj.widgets and obj.widgets.msg_box;
+                local step = target and boxLineHeight(obj, target) or 14;
+                setInputScroll(obj, (obj.wimInputScrollOfs or 0) - delta * step);
+            end);
+            viewport:SetScript("OnSizeChanged", function(self, width)
+                local target = obj.widgets and obj.widgets.msg_box;
+                if(target and width and obj.wimBoxInScroll) then
+                    target:SetWidth(width);
+                end
+                -- A shrunk view or content re-clamps the offset.
+                setInputScroll(obj, obj.wimInputScrollOfs or 0);
+            end);
+            input.scroll = viewport;
+        end
+        local scroll = input.scroll;
+        -- The scroller hangs from the skin's bottom offsets and has an
+        -- explicit height. UpdateThemedInputDecor raises that height as
+        -- the content grows, and grows the window with it.
+        local _, fontHeight = box:GetFont();
+        fontHeight = fontHeight or 14;
+        local leftX, rightX, bottomY = 24, -10, 4;
+        for i=1, #points do
+            local p = points[i];
+            if(string.find(p[1], "LEFT")) then leftX = p[4] or leftX; end
+            if(string.find(p[1], "RIGHT")) then rightX = p[4] or rightX; end
+            if(string.find(p[1], "BOTTOM")) then bottomY = p[5] or bottomY; end
+        end
+        -- The art host (input) takes the row's footprint; the clip
+        -- viewport sits 4px inside it vertically -- 1px inside the
+        -- border lines, which the art draws 3px in -- so scrolled-out
+        -- text is cut before it can reach the border, above or below.
+        input:ClearAllPoints();
+        input:SetPoint("BOTTOMLEFT", obj, "BOTTOMLEFT",
+            leftX - INPUT_LEFT_PULL, bottomY);
+        input:SetPoint("BOTTOMRIGHT", obj, "BOTTOMRIGHT",
+            rightX - 2, bottomY);
+        obj.wimInputRowH = obj.wimInputRowH or 26;
+        input:SetHeight(obj.wimInputRowH);
+        scroll:ClearAllPoints();
+        scroll:SetPoint("TOPLEFT", input, "TOPLEFT", 0, -4);
+        scroll:SetPoint("BOTTOMRIGHT", input, "BOTTOMRIGHT", 0, 4);
+        obj.wimBoxExtra = (obj.wimInputRowH - 26) + WRAP_HEADROOM;
+        scroll:Show();
+
+        -- Reparenting an EditBox or toggling multi-line resets its
+        -- focus and caret, so both apply only on a real change.
+        if(scroll:GetScrollChild() ~= box) then
+            scroll:SetScrollChild(box);
+            box:SetFrameLevel(scroll:GetFrameLevel() + 1);
+        end
+        obj.wimBoxInScroll = true;
+        -- WIM reads the owning window from GetParent(). The shim keeps
+        -- that contract while the box lives in the viewport.
+        box.GetParent = function() return obj; end;
+        if(box:IsMultiLine()) then
+            -- already multi-line; nothing to toggle
+        elseif(not pcall(box.SetMultiLine, box, true)) then
+            -- If the client refuses the runtime toggle, fall back to
+            -- the single-line row rather than a half-configured one.
+            RestoreThemedInput(obj, true);
+            input:ClearAllPoints();
+            input:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0);
+            input:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0);
+            return;
+        end
+        box:ClearAllPoints();
+        box:SetPoint("TOPLEFT", scroll, "TOPLEFT", 0, 0);
+        obj.wimInputScrollOfs = nil;
+        setInputScroll(obj, scroll:GetVerticalScroll() or 0);
+        box:SetWidth(scroll:GetWidth() and scroll:GetWidth() > 0
+            and scroll:GetWidth() or ((obj:GetWidth() or 300) - 24));
+        -- Only a starting height. A multi-line box sizes its own height
+        -- to its content, and that content height is the scroller's
+        -- range. Pinning it to the view height would leave nothing to
+        -- scroll.
+        if((box:GetHeight() or 0) < 1) then
+            box:SetHeight(fontHeight + 6);
+        end
+        if(not obj.wimBoxWheelHooked) then
+            obj.wimBoxWheelHooked = true;
+            -- The box receives mouse input over the text area, so wheel
+            -- events arrive here, not on the viewport beneath it.
+            box:EnableMouseWheel(true);
+            box:HookScript("OnMouseWheel", function(self, delta)
+                if(obj.wimBoxInScroll) then
+                    local step = boxLineHeight(obj, self);
+                    setInputScroll(obj, (obj.wimInputScrollOfs or 0) - delta * step);
+                    UpdateThemedInputDecor(obj);
+                end
+            end);
+        end
+        if(not obj.wimCursorHooked) then
+            obj.wimCursorHooked = true;
+            box:HookScript("OnCursorChanged", function(self, x, y, _, height)
+                local s = chrome.input and chrome.input.scroll;
+                if(not (s and obj.wimBoxInScroll and y)) then return; end
+                -- Keep the cursor's line inside the viewport, with a
+                -- 6px margin so the line never sits flush against
+                -- (or under) the border art. The cursor's reported
+                -- offset excludes the text insets while the text
+                -- renders below them (state-dump measured: the
+                -- follow landed exactly one top-inset short), so the
+                -- inset joins the cursor coordinates.
+                local _, _, insetTop = self:GetTextInsets();
+                local view = s:GetHeight() or 0;
+                local offset = obj.wimInputScrollOfs or 0;
+                local top = -y + (insetTop or 0);
+                local bottom = top + (height or 0);
+                -- Half-pixel tolerance. Without it, rounding between
+                -- the rendered line height and the row budget
+                -- re-triggers the follow on every keystroke.
+                if(top + 0.5 < offset + 2) then
+                    setInputScroll(obj, top - 2);
+                elseif(bottom - 0.5 > offset + view - 2) then
+                    setInputScroll(obj, bottom - view + 2);
+                end
+                UpdateThemedInputDecor(obj);
+            end);
+        end
+    else
+        RestoreThemedInput(obj, true);
+        if(input.scroll) then
+            input.scroll:Hide();
+        end
+        input:ClearAllPoints();
+        input:SetPoint("TOPLEFT", box, "TOPLEFT", 0, 0);
+        input:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", 0, 0);
+    end
+
+    if(obj.wimBoxBaseInsets == nil) then
+        local l, r, t, b = box:GetTextInsets();
+        obj.wimBoxBaseInsets = { l or 0, r or 0, t or 0, b or 0 };
+    end
+    -- The text takes the full row in both modes (the counter lives on
+    -- its own strip below the row). A multi-line box top-aligns its
+    -- text where the single-line box centers it, so the wrap mode
+    -- carries vertical insets that put its first line exactly where
+    -- the single-line row draws its only one.
+    local insets = obj.wimBoxBaseInsets;
+    if(wraps) then
+        -- 2px box insets on top of the viewport's 4px margins: one
+        -- line plus both equals the single-line row exactly, and
+        -- every line keeps the single-line text's clearance to the
+        -- border art.
+        box:SetTextInsets(insets[1], insets[2], insets[3] + 2, insets[4] + 2);
+    else
+        box:SetTextInsets(insets[1], insets[2], insets[3], insets[4]);
+    end
+
+    -- Changing wrap modes re-feeds the text. The box only lays its
+    -- content out again on a text change, and setting the same string
+    -- does nothing, so clear the draft first or it keeps the other
+    -- mode's layout. The state starts unset, so the first entry into
+    -- either mode counts as a change too.
+    local wasWrapped = obj.wimBoxWrapState;
+    obj.wimBoxWrapState = wraps;
+    if(wasWrapped ~= wraps) then
+        local text = box:GetText() or "";
+        box:SetText("");
+        box:SetText(text);
+        box:SetCursorPosition(#text);
+    end
+
+    UpdateThemedInputDecor(obj);
 end
 
 -- The themed close button shows the minimize glyph at rest (click
@@ -873,6 +1429,11 @@ function ApplyModernThemeToWindow(obj)
         if(obj.wimBackdropLevel) then
             bd.bg:GetParent():SetFrameLevel(obj.wimBackdropLevel);
         end
+        -- Classic skins take the input box back: out of the wrap-mode
+        -- scroller, single-line again, with skin anchors and insets.
+        if(obj.wimBoxInScroll or obj.wimBoxBaseInsets) then
+            RestoreThemedInput(obj, false);
+        end
         return;
     end
 
@@ -886,28 +1447,9 @@ function ApplyModernThemeToWindow(obj)
     end
     backdropHost:SetFrameLevel(obj:GetFrameLevel() + 2);
 
-    -- Header layout baselines: the skin re-lays the display and the
-    -- header fonts each pass, so what is current here is the clean
-    -- baseline LayoutThemedHeader adjusts from (repeatedly, without
-    -- compounding).
-    local display = widgets.chat_display;
-    local displayPoints = {};
-    for i=1, display:GetNumPoints() do
-        displayPoints[i] = { display:GetPoint(i) };
-    end
-    obj.wimDisplayBasePoints = displayPoints;
-    local dTop, oTop = display:GetTop(), obj:GetTop();
-    if(dTop and oTop) then
-        obj.wimDisplayBaseTop = dTop - oTop;
-    else
-        for i=1, #displayPoints do
-            local p = displayPoints[i];
-            if(string.find(p[1], "TOP") and p[2] == obj) then
-                obj.wimDisplayBaseTop = p[5] or 0;
-                break;
-            end
-        end
-    end
+    -- Header layout baselines. The layouts derive geometry from the
+    -- skin's own point data on every run, so repeated runs cannot
+    -- drift. Only the fonts need to be captured.
     if(widgets.from) then
         -- The title band text uses the History Viewer's gold 12px
         -- style. This is the baseline size the fit shrinks from.
@@ -919,11 +1461,49 @@ function ApplyModernThemeToWindow(obj)
         local path, size, flags = widgets.char_info:GetFont();
         if(path) then obj.wimInfoBaseFont = { path = path, size = size, flags = flags }; end
     end
+    if(widgets.msg_box) then
+        -- UpdateProps re-applies the saved window height. While the
+        -- wrapped row holds borrowed height, that reset would leave
+        -- the display lifted over a shorter window and shrink the
+        -- message area. Add the borrowed height back after every
+        -- reset.
+        if(not obj.wimPropsWrapped) then
+            obj.wimPropsWrapped = true;
+            local origUpdateProps = obj.UpdateProps;
+            obj.UpdateProps = function(self, ...)
+                origUpdateProps(self, ...);
+                -- The reset re-applied the saved height (custom-sized
+                -- windows are left alone), which removed the borrowed
+                -- height.
+                if(not self.customSize) then
+                    self.wimBorrowShown = 0;
+                end
+                local target = 0;
+                if(self.wimBoxThemed and self.wimChrome
+                        and self.wimChrome:IsShown()) then
+                    target = ((self.wimInputRowH or 26) - 26) + WRAP_HEADROOM;
+                end
+                settleBorrow(self, target);
+            end;
+        end
+        if(not obj.wimInputHooked) then
+            obj.wimInputHooked = true;
+            local function decor()
+                UpdateThemedInputDecor(obj);
+            end
+            widgets.msg_box:HookScript("OnTextChanged", decor);
+            widgets.msg_box:HookScript("OnEditFocusGained", decor);
+            widgets.msg_box:HookScript("OnEditFocusLost", decor);
+            -- Arrow keys scroll the box without a text change.
+            widgets.msg_box:HookScript("OnCursorChanged", decor);
+        end
+    end
     if(not obj.wimHeaderSizeHooked) then
         obj.wimHeaderSizeHooked = true;
         obj:HookScript("OnSizeChanged", function(self)
             if(self.wimChrome and self.wimChrome:IsShown()) then
                 LayoutThemedHeader(self);
+                UpdateThemedInputDecor(self);
             end
         end);
     end
@@ -1043,6 +1623,7 @@ function ApplyModernThemeToWindow(obj)
     end
     ApplyChromeBackgroundChoice(chrome.well.bg, theme.chatPanel);
 
+    LayoutThemedInput(obj);
     LayoutThemedHeader(obj);
 
     -- The corner button: minimize glyph at rest, the X while SHIFT

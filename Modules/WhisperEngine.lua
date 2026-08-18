@@ -341,6 +341,22 @@ function SendSplitMessage(PRIORITY, HEADER, theMsg, CHANNEL, EXTRA, to)
 		return "\001\002"..paddString(#splitMessageLinks, "0", string.len(theLink)-4).."\003\004";
 	end);
 
+	-- A word longer than the limit cannot fit in any chunk; the
+	-- reconstruction below never breaks a word, so such a word went out
+	-- as one oversized message. Break it at the limit so each slice is
+	-- sent as its own message. Links are already reduced to short
+	-- placeholders above and stay whole.
+	theMsg = string.gsub(theMsg, "%S+", function(word)
+		if(string.len(word) < messageLimit) then
+			return nil;
+		end
+		local parts = {};
+		for s=1, string.len(word), messageLimit - 1 do
+			table.insert(parts, string.sub(word, s, s + messageLimit - 2));
+		end
+		return table.concat(parts, " ");
+	end);
+
 	-- split up each word.
 	SplitToTable(theMsg, "%s", splitMessage);
 
@@ -849,13 +865,6 @@ local function editBoxUpdateHeader(self, internalCall)
 	prevChatType, prevTellTarget = chatType, tellTarget;
 
 	if (chatType == "WHISPER" or chatType == "BN_WHISPER") then
-		-- Upstream 3.16.14 fix (issue #258), ported into this fork: ambiguate
-		-- names intercepted from slash commands so that "Name-Realm" and
-		-- "Name" resolve to the same WIM window instead of opening a second
-		-- one.
-		-- Upstream 3.16.16 fix, ported into this fork: guard the Ambiguate
-		-- call. _G.Ambiguate() throws on a nil argument, which happens when a
-		-- slash command is issued with no target at all.
 		local target = tellTarget and _G.Ambiguate(tellTarget, "none");
 
 		-- Handle the whisper interception. Skipped during combat:

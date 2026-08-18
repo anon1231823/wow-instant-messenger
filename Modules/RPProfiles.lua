@@ -37,6 +37,26 @@ local function anyFieldSelected()
     return false;
 end
 
+local function integrationEnabled()
+    local theme = db and db.modernTheme;
+    return (theme and theme.rpEnabled) and true or false;
+end
+
+-- Returns the installed profile viewer, if any: Total RP 3's register
+-- page, or the XRP or MRP viewer.
+local function profileViewer()
+    if(_G.TRP3_API and _G.TRP3_API.register
+            and _G.TRP3_API.register.openPageByUnitID) then
+        return "trp3";
+    end
+    if(_G.XRPViewer and _G.XRPViewer.View) then
+        return "xrp";
+    end
+    if(_G.mrp and _G.mrp.Show) then
+        return "mrp";
+    end
+end
+
 -- Roleplay addons key characters as "Name-NormalizedRealm".
 local function characterID(user)
     if(type(user) ~= "string" or user == "") then
@@ -118,7 +138,7 @@ end
 -- field is selected, no roleplay addon is running, or the character
 -- has no profile; callers then show the game defaults.
 function GetRPProfile(user)
-    if(not (RPProfiles.enabled and anyFieldSelected())) then
+    if(not (RPProfiles.enabled and integrationEnabled() and anyFieldSelected())) then
         return nil;
     end
     local id = characterID(user);
@@ -286,10 +306,11 @@ local function hookWindow(win)
             return;
         end
         local lines = {};
-        -- The full title is long-form prose; it always takes its own
-        -- line above the race/class line.
+        -- The full title is long-form text. It always gets its own line
+        -- above the race/class line, in the orange that roleplay
+        -- tooltips use for titles.
         if(fields.fullTitle and rp.fullTitle and rp.fullTitle ~= "") then
-            table.insert(lines, rp.fullTitle);
+            table.insert(lines, "|cffff8000"..rp.fullTitle.."|r");
         end
         local race = (fields.race and rp.race and rp.race ~= "" and rp.race) or self.race;
         local class = (fields.class and rp.class and rp.class ~= "" and rp.class) or self.class;
@@ -300,9 +321,9 @@ local function hookWindow(win)
         if(race and race ~= "") then table.insert(line, race); end
         if(class and class ~= "") then table.insert(line, class); end
         if(#line > 0) then
-            table.insert(lines, table.concat(line, " "));
+            table.insert(lines, "|cffffffff"..table.concat(line, " ").."|r");
         end
-        self.widgets.char_info:SetText("|cffffffff"..table.concat(lines, "\n").."|r");
+        self.widgets.char_info:SetText(table.concat(lines, "\n"));
     end;
 end
 
@@ -310,6 +331,16 @@ function RefreshRPProfiles()
     for _, win in pairs(windows.active.whisper) do
         hookWindow(win);
         applyToWindow(win);
+        -- Re-evaluate the shortcut bar's buttons. The Open Profile
+        -- shortcut follows the integration switch.
+        local shortcuts = win.widgets and win.widgets.shortcuts;
+        if(shortcuts and shortcuts.buttons) then
+            for i=1, #shortcuts.buttons do
+                if(shortcuts.buttons[i].SetDefaults) then
+                    shortcuts.buttons[i]:SetDefaults();
+                end
+            end
+        end
     end
 end
 
@@ -353,6 +384,41 @@ function RPProfiles:OnWindowCreated(win)
     hookWindow(win);
     applyToWindow(win);
 end
+
+-- The Open Profile shortcut opens the whisper partner's roleplay
+-- profile in the installed viewer. It appears only while the roleplay
+-- integration is enabled and a viewer is available.
+RegisterShortcut("rpprofile", L["Open RP Profile"], {
+    type = "whisper",
+    OnClick = function(self)
+        local win = self.parentWindow;
+        if(not win or win.isBN or win.isGM) then return; end
+        local id = characterID(win.theUser);
+        if(not id) then return; end
+        local viewer = profileViewer();
+        if(viewer == "trp3") then
+            pcall(function()
+                _G.TRP3_API.navigation.openMainFrame();
+                _G.TRP3_API.register.openPageByUnitID(id);
+            end);
+        elseif(viewer == "xrp") then
+            pcall(_G.XRPViewer.View, _G.XRPViewer, id);
+        elseif(viewer == "mrp") then
+            pcall(_G.mrp.Show, _G.mrp, id);
+        end
+    end,
+    SetDefaults = function(self)
+        local win = self.parentWindow;
+        local usable = integrationEnabled() and profileViewer()
+            and win and win.type == "whisper"
+            and not (win.isBN or win.isGM);
+        if(usable) then
+            self:Enable();
+        else
+            self:Disable();
+        end
+    end,
+});
 
 function RPProfiles:OnWindowShow(win)
     if(win.type ~= "whisper") then

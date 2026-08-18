@@ -1333,11 +1333,37 @@ RegisterModernPage(function(category, ui)
             db.modernTheme.chatCutout, db.modernTheme, "chatCutout",
             L["Draws the window frame background only around the message area, so a clear message area background (None or Transparent) shows the game world behind the window."],
             reapply));
+    local wrapControl = ui.Checkbox(cat, L["Wrap the message being typed"],
+        db.modernTheme.inputWrap, db.modernTheme, "inputWrap",
+        L["The input field wraps long messages onto multiple lines, growing downward with the message instead of scrolling it on one line."],
+        reapply);
+    table.insert(backgroundControls, wrapControl);
+    local wrapLimit = ui.Checkbox(cat, L["Limit wrapped lines"],
+        db.modernTheme.inputWrapLimit, db.modernTheme, "inputWrapLimit",
+        L["Caps how far the input field grows; past the limit the message scrolls inside it."],
+        reapply);
+    table.insert(backgroundControls, wrapLimit);
+    ui.DependsOn(wrapLimit, wrapControl);
+    local wrapLines = ui.Slider(cat, L["Visible input lines"],
+        db.modernTheme.inputWrapLines, 1, 6, 1, db.modernTheme, "inputWrapLines",
+        L["The most lines the input field grows to before the message scrolls inside it."],
+        reapply);
+    table.insert(backgroundControls, wrapLines);
+    ui.DependsOn(wrapLines, wrapLimit);
 
     ui.Header(layout, L["Roleplay Profiles"]);
+    local rpEnable = ui.Checkbox(cat, L["Enable roleplay profile integration"],
+        db.modernTheme.rpEnabled, db.modernTheme, "rpEnabled",
+        L["Whisper windows show roleplay profile fields from Total RP 3 or any Mary Sue Protocol addon, and gain an Open RP Profile button on their shortcut bar that opens the partner's profile in the installed viewer."],
+        function()
+            if(RefreshRPProfiles) then
+                RefreshRPProfiles();
+            end
+        end);
+    table.insert(backgroundControls, rpEnable);
     -- One entry per profile field the whisper windows can display.
     -- Nothing selected means the default display.
-    table.insert(backgroundControls,
+    local rpFieldsControl =
         ui.MultiDropdown(cat, L["Displayed profile fields"], {
             { key = "firstName", text = L["First Name"],
               tooltip = L["The profile's first name, shown as the window's name text."] },
@@ -1362,7 +1388,9 @@ RegisterModernPage(function(category, ui)
             if (RefreshRPProfiles) then
                 RefreshRPProfiles();
             end
-        end));
+        end);
+    table.insert(backgroundControls, rpFieldsControl);
+    ui.DependsOn(rpFieldsControl, rpEnable);
 
     for i = 1, #backgroundControls do
         local control = backgroundControls[i];
