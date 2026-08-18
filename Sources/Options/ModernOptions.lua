@@ -1334,6 +1334,36 @@ RegisterModernPage(function(category, ui)
             L["Draws the window frame background only around the message area, so a clear message area background (None or Transparent) shows the game world behind the window."],
             reapply));
 
+    ui.Header(layout, L["Roleplay Profiles"]);
+    -- One entry per profile field the whisper windows can display.
+    -- Nothing selected means the default display.
+    table.insert(backgroundControls,
+        ui.MultiDropdown(cat, L["Displayed profile fields"], {
+            { key = "firstName", text = L["First Name"],
+              tooltip = L["The profile's first name, shown as the window's name text."] },
+            { key = "lastName", text = L["Last Name"],
+              tooltip = L["The profile's last name, shown as the window's name text."] },
+            { key = "title", text = L["Title"],
+              tooltip = L["The short title, shown on the window's details line."] },
+            { key = "fullTitle", text = L["Full Title"],
+              tooltip = L["The long title, shown on the window's details line and portrait tooltip."] },
+            { key = "race", text = L["Race"],
+              tooltip = L["The custom race, replacing the character's race on the details line."] },
+            { key = "class", text = L["Class"],
+              tooltip = L["The custom class, replacing the character's class on the details line."] },
+            { key = "portrait", text = L["Portrait"],
+              tooltip = L["The profile's icon, replacing the class icon."] },
+            { key = "color", text = L["Name & Class Color"],
+              tooltip = L["The profile's custom color, applied to the window's name text and to the class on the details line."] },
+        }, db.modernTheme, "rpFields",
+        L["Whisper windows show the selected fields from the partner's Total RP 3 or Mary Sue Protocol profile. Fields left unselected -- or without profile data -- keep the standard display."],
+        L["None (game default)"],
+        function()
+            if (RefreshRPProfiles) then
+                RefreshRPProfiles();
+            end
+        end));
+
     for i = 1, #backgroundControls do
         local control = backgroundControls[i];
         if (control and control.init and control.init.AddModifyPredicate) then

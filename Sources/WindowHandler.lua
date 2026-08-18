@@ -2117,20 +2117,27 @@ RegisterWidgetTrigger("chat_display", "whisper,chat,w2w,demo", "OnMouseUp", func
 
 --ItemRef Definitions
 local registeredItemRef = {};
+
+-- Handles WIM's registered custom link types (wim_url, filter notices,
+-- and so on) for any frame with hyperlinks. Returns true when a handler
+-- consumed the link. The message windows' handler and the History
+-- Viewer's chat pane both route through this.
+function DispatchItemRefHandler(link)
+    for cmd, fun in pairs(registeredItemRef) do
+        if(string.match(link, "^"..cmd..":")) then
+            fun(link);
+            return true;
+        end
+    end
+    return false;
+end
+
 function RegisterItemRefHandler(cmd, fun)
     registeredItemRef[cmd] = fun;
 end
 
 local myself = _G.UnitName("player")
 RegisterWidgetTrigger("chat_display", "whisper,chat,w2w", "OnHyperlinkClick", function(self, link, text, button)
-	-- Blizzard's chat frames announce every hyperlink click on the
-	-- event registry BEFORE SetItemRef, and the player context menu is
-	-- opened by a listener on that event -- SetItemRef alone no longer
-	-- produces it.
-	if(_G.EventRegistry and _G.EventRegistry.TriggerEvent) then
-		_G.EventRegistry:TriggerEvent("ChatFrame.OnHyperlinkClick", self, link, text, button);
-	end
-
 	local t,n,i = string.split(":", link)
 	local winType = self:GetParent().type
 
@@ -2175,11 +2182,8 @@ RegisterWidgetTrigger("chat_display", "whisper,chat,w2w", "OnHyperlinkClick", fu
 	end
 
 	-- registered ItemRef handlers
-	for cmd, fun in pairs(registeredItemRef) do
-		if(string.match(link, "^"..cmd..":")) then
-			fun(link);
-			return;
-		end
+	if(DispatchItemRefHandler(link)) then
+		return;
 	end
 
 	if t == 'player' then

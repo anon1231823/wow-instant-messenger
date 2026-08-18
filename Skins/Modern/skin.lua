@@ -21,6 +21,10 @@ local WIM_ModernSkin = {
     modernOnly = true,
     message_window = {
         texture = path.."message_window.png",
+        -- The themed construction needs this much height for the header
+        -- band, some message well, and the input row. Below it, the
+        -- in-well scrollbar and the side column overflow the frame.
+        min_height = 150,
         -- The texture is a 64px nine-slice on the classic .25 coordinate
         -- grid; only the rendered corner size changes.
         backdrop = {
@@ -119,6 +123,8 @@ local WIM_ModernSkin = {
         scrollbar_style = "minimal",
         search_style = "native",
         dropdown_style = "modern",
+        -- The loading indicator as the game's standard casting bar.
+        loader_style = "native",
         -- The Settings panel's arrangement: view tabs at the top left,
         -- the search box at the top right of the band under the title
         -- bar, panes flush at top and bottom, resize grip in the frame

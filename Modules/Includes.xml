@@ -19,5 +19,6 @@
     <Script file="OffScreenTracker.lua"/>
     <Script file="alias.lua"/>
     <Script file="AddonCompartment.lua"/>
+    <Script file="RPProfiles.lua"/>
 
 </Ui>

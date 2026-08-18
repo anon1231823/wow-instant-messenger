@@ -1706,6 +1706,10 @@ local function createHistoryViewer()
         SetWidgetFont(win.nav.filters.text, hv.header);
         SetWidgetFont(win.search.label, hv.header);
 
+        if(win.StyleLoader) then
+            win.StyleLoader(hv.loader_style == "native");
+        end
+
         -- Character selector: the modern dropdown control when the
         -- skin opts in and the client has the Menu API, the classic
         -- one otherwise.
@@ -3319,6 +3323,9 @@ local function createHistoryViewer()
     win.content.chatFrame._allowCustomFont = true;
     win.content.chatFrame:EnableMouse(true);
     win.content.chatFrame:EnableMouseWheel(true);
+    -- Scripted message frames ignore link clicks until this is set;
+    -- without it the OnHyperlinkClick handler below never fires.
+    win.content.chatFrame:SetHyperlinksEnabled(true);
     win.content.chatFrame:SetJustifyH("LEFT");
     win.content.chatFrame:SetFading(false);
     win.content.chatFrame:SetMaxLines(800);
@@ -3362,10 +3369,19 @@ local function createHistoryViewer()
 	    self:update();
 	end);
 
-    win.content.chatFrame:SetScript("OnHyperlinkClick",
-		_G.ChatFrameMixin and _G.ChatFrameMixin.OnHyperlinkClick or
-		_G.ChatFrame_OnHyperlinkShow
-	);
+    -- WIM's custom link types (the bracketed URLs' copy popup, filter
+    -- notices) are serviced first -- the stock chat handler has never
+    -- heard of them -- and everything else takes the stock path.
+    local stockHyperlinkClick = _G.ChatFrameMixin and _G.ChatFrameMixin.OnHyperlinkClick
+        or _G.ChatFrame_OnHyperlinkShow;
+    win.content.chatFrame:SetScript("OnHyperlinkClick", function(self, link, text, button)
+            if(DispatchItemRefHandler and DispatchItemRefHandler(link)) then
+                return;
+            end
+            if(stockHyperlinkClick) then
+                stockHyperlinkClick(self, link, text, button);
+            end
+        end);
 
     win.content.chatFrame.up = CreateFrame("Button", nil, win.content.chatFrame);
     win.content.chatFrame.up:SetWidth(28); win.content.chatFrame.up:SetHeight(28);
@@ -3485,6 +3501,11 @@ local function createHistoryViewer()
 
     win.UpdateDisplay = function(self)
         if(win.displayUpdate) then
+            -- The pass snapshots the record list and date window in its
+            -- OnShow, so a pass already in flight would finish with the
+            -- previous selection's snapshot and Show() alone would not
+            -- re-fire it; the hide restarts the pass for this selection.
+            win.displayUpdate:Hide();
             win.displayUpdate:Show();
         end
     end
@@ -3738,6 +3759,60 @@ local function createHistoryViewer()
             win.displayUpdate:Hide();
         end);
 
+    -- Dresses the loading indicator per the skin: the native style is
+    -- the game's standard casting bar (track, fill and frame overlay
+    -- atlases) with the standard red X to cancel; the classic style is
+    -- the original hairline-framed panel. The fill texture is shared,
+    -- so the display pass's width updates drive both styles.
+    win.StyleLoader = function(native)
+        local pb = win.progressBar;
+        for _, tex in pairs(pb.backdrop) do tex:SetShown(not native); end
+        for _, tex in pairs(pb.bar.backdrop) do tex:SetShown(not native); end
+        pb.text:ClearAllPoints();
+        if(native) then
+            if(not pb.bar.wimTrack) then
+                pb.bar.wimTrack = pb.bar:CreateTexture(nil, "BACKGROUND");
+                pb.bar.wimTrack:SetAllPoints(pb.bar);
+                -- Above the fill (both are OVERLAY; the fill was
+                -- created at sublevel 0).
+                pb.bar.wimFrameArt = pb.bar:CreateTexture(nil, "OVERLAY", nil, 3);
+                pb.bar.wimFrameArt:SetPoint("CENTER");
+            end
+            pb.bar.wimTrack:SetAtlas("ui-castingbar-background");
+            pb.bar.wimTrack:Show();
+            -- The casting bar's frame is drawn 214x16 over a 209x11
+            -- track, centered.
+            pb.bar.wimFrameArt:SetAtlas("ui-castingbar-frame");
+            pb.bar.wimFrameArt:SetSize(214, 16);
+            pb.bar.wimFrameArt:Show();
+            pb:SetSize(244, 52);
+            pb.bar:SetSize(209, 11);
+            pb.bar.bg:SetAtlas("ui-castingbar-filling-standard");
+            pb.text:SetFontObject(_G.GameFontHighlight);
+            pb.text:SetPoint("BOTTOM", pb.bar, "TOP", 0, 7);
+            pb.delete:SetNormalAtlas("RedButton-Exit");
+            pb.delete:SetPushedAtlas("RedButton-exit-pressed");
+            pb.delete:SetHighlightAtlas("RedButton-Highlight", "ADD");
+            pb.delete:GetHighlightTexture():SetAlpha(1);
+        else
+            if(pb.bar.wimTrack) then
+                pb.bar.wimTrack:Hide();
+                pb.bar.wimFrameArt:Hide();
+            end
+            pb:SetSize(300, 65);
+            pb.bar:SetSize(250, 15);
+            pb.bar.bg:SetColorTexture(1, 1, 1, .5);
+            pb.text:SetFontObject(_G.ChatFontNormal);
+            pb.text:SetPoint("BOTTOMLEFT", pb.bar, "TOPLEFT", 0, 5);
+            pb.delete:SetNormalTexture("Interface\\AddOns\\"..addonTocName.."\\Modules\\Textures\\xNormal");
+            pb.delete:SetPushedTexture("Interface\\AddOns\\"..addonTocName.."\\Modules\\Textures\\xPressed");
+            local highlight = pb.delete:GetHighlightTexture();
+            if(highlight) then
+                highlight:SetAlpha(0);
+            end
+        end
+    end
+
     win.ApplySkin();
 
     win.content.tabs[1]:Click();
@@ -3887,7 +3962,6 @@ local function createDisplayUpdate()
 end
 
 local colorWhite = {r=1, g=1, b=1};
-local chatFrameMsgId = -1;
 table.insert(ViewTypes, {
         text = L["Chat View"],
         frame = "chatFrame",
@@ -3906,10 +3980,12 @@ table.insert(ViewTypes, {
                 nextColor.r, nextColor.g, nextColor.b = color.r, color.g, color.b;
             end
                 frame.nextStamp = msg.time;
+                -- Replayed messages have no live chat line; the line ID
+                -- must be 0 (the "no chat line" convention) because the
+                -- unit popup's chat-line validation errors on anything
+                -- outside the valid range when a player link is clicked.
                 frame:AddMessage(applyStringModifiers(applyMessageFormatting(frame, "CHAT_MSG_"..(msg.event or "WHISPER"), msg.msg, msg.from,
-                        nil, nil, nil, nil, 0, msg.channelName and ChannelCache[msg.channelName], msg.channelName, nil, chatFrameMsgId, "0x0300000000000000"), frame), color.r, color.g, color.b);
-                chatFrameMsgId = chatFrameMsgId > -1000 and chatFrameMsgId - 1 or -1;
-
+                        nil, nil, nil, nil, 0, msg.channelName and ChannelCache[msg.channelName], msg.channelName, nil, 0, "0x0300000000000000"), frame), color.r, color.g, color.b);
         end
     });
 table.insert(ViewTypes, {

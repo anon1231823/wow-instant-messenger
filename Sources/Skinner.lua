@@ -5,6 +5,7 @@ local _G = _G;
 local table = table;
 local pairs = pairs;
 local string = string;
+local math = math;
 local debugstack = debugstack;
 local type = type;
 local unpack = unpack;
@@ -44,6 +45,9 @@ db_defaults.modernTheme = {
     chatFrame = "rock",
     chatPanel = "darkmarble",
     chatCutout = false,
+    -- Which roleplay profile fields replace the stock display on
+    -- whisper windows; empty means the stock display, untouched.
+    rpFields = {},
 };
 
 -- The panel art offered by the Modern Theme background pickers: the
@@ -456,6 +460,25 @@ local function buildWindowChrome(obj)
     stripRight:SetPoint("BOTTOM", display, "BOTTOM", 0, -6);
     chrome.strips = { stripTop, stripBottom, stripLeft, stripRight };
 
+    -- Cut the frame fill out behind the circled portrait. An inverse
+    -- circular mask (white field, clear circle) covers the portrait's
+    -- footprint on the fill and on the cut-out strips. Without it, a
+    -- translucent window shows the fill's edge crossing the circle
+    -- behind the icon.
+    if(chrome.hasPortrait and chrome.bg.AddMaskTexture) then
+        local hole = chrome:CreateMaskTexture();
+        -- PNG textures resolve only with their extension spelled out.
+        hole:SetTexture("Interface\\AddOns\\"..addonTocName.."\\Skins\\Modern\\portrait_hole_mask.png",
+            "CLAMPTOWHITE", "CLAMPTOWHITE");
+        hole:SetPoint("CENTER", obj, "TOPLEFT", 25.5, -22);
+        hole:SetSize(56, 56);
+        chrome.bg:AddMaskTexture(hole);
+        for i = 1, #chrome.strips do
+            chrome.strips[i]:AddMaskTexture(hole);
+        end
+        chrome.portraitHole = hole;
+    end
+
     -- Message well: a recessed inset around the display area. The well
     -- extends 24px past the display on the right. The theme pulls the
     -- display's right edge in by 18px; the well keeps its original
@@ -619,14 +642,141 @@ end
 function ZoomPortraitIcon(obj)
     local icon = obj.widgets and obj.widgets.class_icon;
     if(not icon) then return; end
+    -- Roleplay profile portraits are full-frame images, not emblem
+    -- cells. Their crop is applied where they are painted.
+    if(obj.wimRPIcon) then return; end
     local ulx, uly, _, lly, urx = icon:GetTexCoord();
     local left, right, top, bottom = ulx, urx, uly, lly;
     local w, h = right - left, bottom - top;
     if(w <= 0 or h <= 0) then return; end
-    -- Measured from the class-icon sheet: the emblem occupies only the
-    -- middle ~58% of its cell (a ~20% transparent inset each side).
-    local ix, iy = w * 0.19, h * 0.19;
+    -- Measured from the class-icon sheet: the emblem fills only the
+    -- middle ~58% of its cell, with a ~20% transparent inset on each
+    -- side. The zoom inset is slightly larger than that margin so the
+    -- emblem spans the full circle instead of floating inside it. The
+    -- circular mask hides the small overshoot at the edges.
+    local ix, iy = w * 0.22, h * 0.22;
     icon:SetTexCoord(left + ix, right - ix, top + iy, bottom - iy);
+end
+
+-- Themed header layout. The title text runs between the circled
+-- portrait and the corner button. The details text runs between the
+-- portrait and the frame edge. The message well starts below whichever
+-- needs more room. Text keeps its skin font size and shrinks to fit
+-- long content, down to a minimum size. Past that minimum, a
+-- single-line string truncates, and the details text word-wraps
+-- (centered) and pushes the well down instead of overflowing into it.
+-- The layout reruns on resize and on text changes, always from the
+-- skin baseline the theme pass captured.
+local HEADER_MIN_FONT = 10;
+
+local function fitHeaderLine(fs, base, avail, wraps)
+    if(not (fs and base) or not avail or avail <= 0) then return; end
+    fs:SetFont(base.path, base.size, base.flags);
+    local width = fs.GetUnboundedStringWidth
+        and fs:GetUnboundedStringWidth() or fs:GetStringWidth();
+    if(width and width > avail) then
+        local size = math.floor(base.size * avail / width);
+        if(size >= HEADER_MIN_FONT) then
+            fs:SetFont(base.path, size, base.flags);
+        elseif(not wraps) then
+            fs:SetFont(base.path, HEADER_MIN_FONT, base.flags);
+        end
+        -- A wrapping string keeps the skin font size and wraps when
+        -- even the minimum size cannot fit its longest line.
+    end
+end
+
+function LayoutThemedHeader(obj)
+    local chrome = obj.wimChrome;
+    local widgets = obj.widgets;
+    if(not (chrome and chrome:IsShown() and widgets)) then return; end
+    local from, info = widgets.from, widgets.char_info;
+
+    -- Center the title text in the band. The band's optical center is
+    -- y -11.5 (the History Viewer's measurement). The usable span runs
+    -- from the portrait circle (x 53.5) to the corner button (left
+    -- edge -23).
+    if(from and obj.wimFromBaseFont) then
+        from:ClearAllPoints();
+        from:SetPoint("LEFT", obj, "TOPLEFT", 56, -11.5);
+        from:SetPoint("RIGHT", obj, "TOPRIGHT", -27, -11.5);
+        from:SetJustifyH("CENTER");
+        from:SetWordWrap(false);
+        fitHeaderLine(from, obj.wimFromBaseFont, from:GetWidth(), false);
+    end
+
+    local infoBottom = -28;
+    if(info and obj.wimInfoBaseFont) then
+        info:ClearAllPoints();
+        info:SetPoint("TOPLEFT", obj, "TOPLEFT", 56, -28);
+        info:SetPoint("TOPRIGHT", obj, "TOPRIGHT", -8, -28);
+        info:SetJustifyH("CENTER");
+        info:SetWordWrap(true);
+        info:SetNonSpaceWrap(true);
+        fitHeaderLine(info, obj.wimInfoBaseFont, info:GetWidth(), true);
+        infoBottom = -28 - (info:GetStringHeight() or 0);
+    end
+
+    -- The well (display top +6) starts below the circle or below the
+    -- details text, whichever reaches lower. It never rises above the
+    -- skin's own baseline.
+    local basePoints = obj.wimDisplayBasePoints;
+    local display = widgets.chat_display;
+    local headerHeight = 54;
+    if(display and basePoints) then
+        local wellTop = infoBottom - 4;
+        if(chrome.hasPortrait and wellTop > -54) then wellTop = -54; end
+        local baseTop = obj.wimDisplayBaseTop;
+        local deltaY = 0;
+        local desiredTop = wellTop - 6;
+        if(baseTop) then
+            if(desiredTop > baseTop) then desiredTop = baseTop; end
+            deltaY = desiredTop - baseTop;
+        end
+        headerHeight = -desiredTop;
+        display:ClearAllPoints();
+        for i=1, #basePoints do
+            local p = basePoints[i];
+            local x = p[4] or 0;
+            local y = p[5] or 0;
+            -- The right edge pulls in for the in-well scrollbar.
+            if(string.find(p[1], "RIGHT")) then x = x - 18; end
+            if(string.find(p[1], "TOP")) then y = y + deltaY; end
+            display:SetPoint(p[1], p[2], p[3], x, y);
+        end
+    end
+
+    -- Dynamic minimum height: the header, the current right-side
+    -- column (its buttons hang from the well's top), and the input row
+    -- must all fit inside the frame.
+    local column = 0;
+    local history = widgets.history;
+    if(history and history:IsShown()) then
+        column = column + (history:GetHeight() or 0) + 4;
+    end
+    local shortcuts = widgets.shortcuts;
+    if(shortcuts and shortcuts:IsShown()) then
+        local buttons = { shortcuts:GetChildren() };
+        for i=1, #buttons do
+            if(buttons[i]:IsShown()) then
+                column = column + (buttons[i]:GetHeight() or 0) + 2;
+            end
+        end
+    end
+    local skinWindow = GetSelectedSkin().message_window;
+    local minHeight = headerHeight + math.max(column, 60) + 44;
+    if(skinWindow.min_height and minHeight < skinWindow.min_height) then
+        minHeight = skinWindow.min_height;
+    end
+    local minWidth = skinWindow.min_width or 256;
+    if(obj.SetResizeBounds) then
+        obj:SetResizeBounds(minWidth, minHeight);
+    elseif(obj.SetMinResize) then
+        obj:SetMinResize(minWidth, minHeight);
+    end
+    if((obj:GetHeight() or 0) < minHeight - 0.5) then
+        obj:SetHeight(minHeight);
+    end
 end
 
 -- The themed close button shows the minimize glyph at rest (click
@@ -736,19 +886,56 @@ function ApplyModernThemeToWindow(obj)
     end
     backdropHost:SetFrameLevel(obj:GetFrameLevel() + 2);
 
-    -- The display's right edge pulls in for the in-well scrollbar (the
-    -- skin re-lays the widget each pass, so this reapplies cleanly).
+    -- Header layout baselines: the skin re-lays the display and the
+    -- header fonts each pass, so what is current here is the clean
+    -- baseline LayoutThemedHeader adjusts from (repeatedly, without
+    -- compounding).
     local display = widgets.chat_display;
     local displayPoints = {};
     for i=1, display:GetNumPoints() do
         displayPoints[i] = { display:GetPoint(i) };
     end
-    display:ClearAllPoints();
-    for i=1, #displayPoints do
-        local p = displayPoints[i];
-        local x = p[4] or 0;
-        if(string.find(p[1], "RIGHT")) then x = x - 18; end
-        display:SetPoint(p[1], p[2], p[3], x, p[5]);
+    obj.wimDisplayBasePoints = displayPoints;
+    local dTop, oTop = display:GetTop(), obj:GetTop();
+    if(dTop and oTop) then
+        obj.wimDisplayBaseTop = dTop - oTop;
+    else
+        for i=1, #displayPoints do
+            local p = displayPoints[i];
+            if(string.find(p[1], "TOP") and p[2] == obj) then
+                obj.wimDisplayBaseTop = p[5] or 0;
+                break;
+            end
+        end
+    end
+    if(widgets.from) then
+        -- The title band text uses the History Viewer's gold 12px
+        -- style. This is the baseline size the fit shrinks from.
+        local fontPath = _G.GameFontNormal:GetFont();
+        widgets.from:SetTextColor(_G.GameFontNormal:GetTextColor());
+        obj.wimFromBaseFont = { path = fontPath, size = 12, flags = "" };
+    end
+    if(widgets.char_info) then
+        local path, size, flags = widgets.char_info:GetFont();
+        if(path) then obj.wimInfoBaseFont = { path = path, size = size, flags = flags }; end
+    end
+    if(not obj.wimHeaderSizeHooked) then
+        obj.wimHeaderSizeHooked = true;
+        obj:HookScript("OnSizeChanged", function(self)
+            if(self.wimChrome and self.wimChrome:IsShown()) then
+                LayoutThemedHeader(self);
+            end
+        end);
+    end
+    if(not obj.wimCharDetailsWrapped) then
+        obj.wimCharDetailsWrapped = true;
+        local origUpdateCharDetails = obj.UpdateCharDetails;
+        obj.UpdateCharDetails = function(self, ...)
+            origUpdateCharDetails(self, ...);
+            if(self.wimChrome and self.wimChrome:IsShown()) then
+                LayoutThemedHeader(self);
+            end
+        end;
     end
     if(chrome.scrollBar) then
         local up, down = widgets.scroll_up, widgets.scroll_down;
@@ -805,11 +992,17 @@ function ApplyModernThemeToWindow(obj)
             -- CircleMaskScalable's circle reaches the mask's edges
             -- (the portrait alpha-mask file bakes in padding that
             -- shrank the visible circle short of the ring). The atlas
-            -- spans its whole file, so the file id is used directly:
-            -- mask textures reliably accept SetTexture, while SetAtlas
-            -- support on them is doubtful.
-            mask:SetTexture(3605349,
-                "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE");
+            -- path is the reliable one -- a mask fed the file id
+            -- directly reports as attached yet fails to clip in some
+            -- sessions (state-dump verified both ways) -- with the
+            -- file id kept as the fallback.
+            local usedAtlas = mask.SetAtlas
+                and pcall(mask.SetAtlas, mask, "CircleMaskScalable")
+                and mask:GetAtlas() ~= nil;
+            if(not usedAtlas) then
+                mask:SetTexture(3605349,
+                    "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE");
+            end
             mask:SetAllPoints(icon);
             obj.wimPortraitMask = mask;
         end
@@ -817,7 +1010,6 @@ function ApplyModernThemeToWindow(obj)
             icon:AddMaskTexture(obj.wimPortraitMask);
             obj.wimPortraitMasked = true;
         end
-        ZoomPortraitIcon(obj);
         if(not obj.wimUpdateIconWrapped) then
             obj.wimUpdateIconWrapped = true;
             local origUpdateIcon = obj.UpdateIcon;
@@ -829,6 +1021,12 @@ function ApplyModernThemeToWindow(obj)
                 end
             end;
         end
+        -- A full repaint, not just a zoom. The zoom multiplies the
+        -- icon's current coordinates, so zooming an already-zoomed
+        -- icon shrinks the emblem one step further on every settings
+        -- change that reapplies the skin. The repaint resets the
+        -- coordinates before the wrapper above zooms them once.
+        obj:UpdateIcon();
     end
 
 
@@ -845,16 +1043,7 @@ function ApplyModernThemeToWindow(obj)
     end
     ApplyChromeBackgroundChoice(chrome.well.bg, theme.chatPanel);
 
-    -- Title band: the conversation name centered in gold, as the
-    -- History Viewer titles its band.
-    local from = widgets.from;
-    if(from) then
-        local fontPath = _G.GameFontNormal:GetFont();
-        from:SetFont(fontPath, 12, "");
-        from:SetTextColor(_G.GameFontNormal:GetTextColor());
-        from:ClearAllPoints();
-        from:SetPoint("CENTER", obj, "TOP", 0, -11.5);
-    end
+    LayoutThemedHeader(obj);
 
     -- The corner button: minimize glyph at rest, the X while SHIFT
     -- is held (see UpdateThemedCloseArt).

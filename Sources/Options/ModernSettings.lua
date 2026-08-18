@@ -291,6 +291,67 @@ function ui.Dropdown(category, name, default, items, dbTree, varName, tooltip, v
     return { setting = setting, init = init };
 end
 
+-- A multiselect dropdown, the way the game's own options render
+-- bitfield settings: a standard dropdown whose menu rows are checkboxes
+-- and whose button text lists the selection. items is an ordered array
+-- of { key=..., text=..., tooltip=... }. The selection is stored as
+-- named booleans in resolveTree(dbTree)[varName]. The proxy setting's
+-- Number value is the items' bitmask (bit i for the i-th item), the
+-- encoding the stock dropdown checkbox rows toggle.
+function ui.MultiDropdown(category, name, items, dbTree, varName, tooltip, noneText, valChanged)
+    local function fieldTable()
+        local tree = resolveTree(dbTree);
+        local fields = tree[varName];
+        if (type(fields) ~= "table") then
+            fields = {};
+            tree[varName] = fields;
+        end
+        return fields;
+    end
+    local function getMask()
+        local fields = fieldTable();
+        local mask = 0;
+        for i = 1, #items do
+            if (fields[items[i].key]) then
+                mask = mask + 2^(i - 1);
+            end
+        end
+        return mask;
+    end
+    local function setMask(mask)
+        local fields = fieldTable();
+        local remainder = mask;
+        for i = 1, #items do
+            local selected = (remainder % 2) == 1;
+            fields[items[i].key] = selected or nil;
+            remainder = (remainder - (remainder % 2)) / 2;
+        end
+        options.DebugSetting("modern", varName, mask);
+        if (valChanged) then valChanged(); end
+        refreshOpenClassicPage();
+    end
+    local setting = Settings.RegisterProxySetting(category, nextVariable(),
+        Settings.VarType.Number, name, 0, getMask, setMask);
+    table.insert(allSettings, setting);
+    local function getOptions()
+        local container = Settings.CreateControlTextContainer();
+        for i = 1, #items do
+            container:AddCheckbox(i, items[i].text, items[i].tooltip);
+        end
+        return container:GetData();
+    end
+    local init = Settings.CreateDropdown(category, setting, getOptions, tooltip);
+    -- Nothing selected reads as its own state; otherwise nil defers
+    -- to the control's standard selection-listing text.
+    init.getSelectionTextFunc = function(selections)
+        if (#selections == 0) then
+            return noneText;
+        end
+        return nil;
+    end;
+    return { setting = setting, init = init };
+end
+
 -- Root-page extras: the bug-report callout and the credits. Both are
 -- custom element rows with persistent holders reparented on display,
 -- like every other custom row.
