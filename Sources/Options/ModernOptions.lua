@@ -214,8 +214,7 @@ end
 -- ----------------------------------------------- custom settings-list rows
 -- Layout constants matching the native rows: labels indented like row
 -- titles, controls in the settings control column.
-local ROW_LABEL_X   = 37;
-local ROW_CONTROL_X = 340;
+local ROW_LABEL_X = 37;
 
 -- Color picker plumbing shared by the swatch rows.
 local function pickerWidget()
@@ -253,37 +252,89 @@ local function openColorPicker(key, onChanged)
     end
 end
 
--- Color swatch row: label + clickable swatch. Rows are pooled, so widgets
--- build once per frame and the color KEY rebinds on every Init.
-local colorRows = {};
-local function colorRowInit(row, data)
-    if (not row.swatch) then
-        row.Text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
-        row.Text:SetPoint("LEFT", ROW_LABEL_X, 0);
-        row.Text:SetPoint("RIGHT", row, "LEFT", ROW_CONTROL_X - 10, 0);
-        row.Text:SetJustifyH("LEFT");
-        row.swatch = CreateFrame("Button", nil, row);
-        row.swatch:SetSize(20, 20);
-        row.swatch:SetPoint("LEFT", row, "LEFT", ROW_CONTROL_X, 0);
-        row.swatch:SetNormalTexture("Interface\\ChatFrame\\ChatFrameColorSwatch");
-        row.UpdateColor = function(self)
-            if (self.data and self.data.key) then
-                local c = db.displayColors[self.data.key];
-                self.swatch:GetNormalTexture():SetVertexColor(c.r, c.g, c.b);
-            end
-        end
-        row.swatch:SetScript("OnClick", function()
-            openColorPicker(row.data.key, function() row:UpdateColor(); end);
-        end);
-        table.insert(colorRows, row);
+-- Grouped color panel, built like the Accessibility > Colors page: a
+-- header with the swatch rows beneath it, each label tinted in its
+-- current color, each swatch the game's own ColorSwatchTemplate. The
+-- panel frame is pooled per template, so the row set rebinds on every
+-- Init; the two pages carry different color lists.
+local colorPanels = {};
+
+local function colorRowUpdate(row)
+    local c = row.colorKey and db.displayColors[row.colorKey];
+    if (not c) then
+        return;
     end
-    row.Text:SetText(data.label);
-    row:UpdateColor();
+    row.Text:SetTextColor(c.r, c.g, c.b);
+    if (row.ColorSwatch.Color) then
+        row.ColorSwatch.Color:SetVertexColor(c.r, c.g, c.b);
+    elseif (row.ColorSwatch.GetNormalTexture) then
+        row.ColorSwatch:GetNormalTexture():SetVertexColor(c.r, c.g, c.b);
+    end
 end
+
+local function acquireColorRow(panel, index)
+    local row = panel.rows[index];
+    if (row) then
+        return row;
+    end
+    -- The game's own row template first; a hand-built equivalent only
+    -- for clients without it (same shape, same offsets).
+    local ok;
+    ok, row = pcall(CreateFrame, "Frame", nil, panel, "ColorOverrideTemplate");
+    if (not (ok and row and row.Text and row.ColorSwatch)) then
+        row = CreateFrame("Frame", nil, panel);
+        row:SetSize(300, 20);
+        row.Text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall");
+        row.Text:SetPoint("TOPLEFT", 0, -5);
+        row.Text:SetJustifyH("LEFT");
+        local okSwatch, swatch = pcall(CreateFrame, "Button", nil, row,
+            "ColorSwatchTemplate");
+        if (not (okSwatch and swatch)) then
+            swatch = CreateFrame("Button", nil, row);
+            swatch:SetSize(20, 20);
+            swatch:SetNormalTexture("Interface\\ChatFrame\\ChatFrameColorSwatch");
+        end
+        swatch:SetPoint("TOPLEFT", row.Text, "TOPLEFT", 192, 3);
+        row.ColorSwatch = swatch;
+    end
+    row:SetPoint("TOPLEFT", panel.header, "BOTTOMLEFT", 15, -10 - (index - 1) * 30);
+    row.ColorSwatch:SetScript("OnClick", function()
+        openColorPicker(row.colorKey, function() colorRowUpdate(row); end);
+    end);
+    panel.rows[index] = row;
+    return row;
+end
+
+local function colorPanelInit(panel, data)
+    if (not panel.rows) then
+        panel.rows = {};
+        panel.header = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal");
+        panel.header:SetHeight(20);
+        panel.header:SetPoint("TOPLEFT", ROW_LABEL_X, 0);
+        panel.header:SetJustifyH("LEFT");
+        table.insert(colorPanels, panel);
+    end
+    panel.header:SetText(_G.COLORS or L["Colors"]);
+    for i = 1, #data.colors do
+        local row = acquireColorRow(panel, i);
+        row.colorKey = data.colors[i].key;
+        row.Text:SetText(data.colors[i].label);
+        colorRowUpdate(row);
+        row:Show();
+    end
+    for i = #data.colors + 1, #panel.rows do
+        panel.rows[i]:Hide();
+        panel.rows[i].colorKey = nil;
+    end
+end
+
 options.RegisterModernRefresh(function()
-    for i = 1, #colorRows do
-        if (colorRows[i]:IsVisible()) then
-            colorRows[i]:UpdateColor();
+    for i = 1, #colorPanels do
+        local panel = colorPanels[i];
+        if (panel:IsVisible() and panel.rows) then
+            for j = 1, #panel.rows do
+                colorRowUpdate(panel.rows[j]);
+            end
         end
     end
 end);
@@ -323,16 +374,15 @@ local function previewRowInit(row)
     if (not previewHolder) then
         previewHolder = CreateFrame("Frame");
         previewHolder:Hide();
-        local title = previewHolder:CreateFontString(nil, "OVERLAY", "GameFontHighlight");
-        title:SetPoint("TOPLEFT", ROW_LABEL_X, -4);
-        title:SetText(L["Preview"]);
+        -- The nameplate preview's construction: a child plate inset
+        -- 20px from the row's edges, with the PREVIEW tag inside.
         local border = CreateFrame("Frame", nil, previewHolder);
-        border:SetPoint("TOPLEFT", ROW_LABEL_X, -24);
-        border:SetPoint("BOTTOMRIGHT", -37, 4);
-        options.AddFramedBackdrop(border);
+        border:SetPoint("TOPLEFT", 20, 0);
+        border:SetPoint("BOTTOMRIGHT", -20, 0);
+        local native = options.AddOptionsPlate(border, true);
         local prev = CreateFrame("ScrollingMessageFrame", nil, border);
-        prev:SetPoint("TOPLEFT", 5, -5);
-        prev:SetPoint("BOTTOMRIGHT", -5, 5);
+        prev:SetPoint("TOPLEFT", 10, native and -26 or -10);
+        prev:SetPoint("BOTTOMRIGHT", -10, 8);
         prev:SetFading(false);
         prev:SetMaxLines(5);
         prev:SetJustifyH("LEFT");
@@ -364,9 +414,9 @@ local function buildFontBrowser()
     holder:Hide();
 
     local border = CreateFrame("Frame", nil, holder);
-    border:SetPoint("TOPLEFT", ROW_LABEL_X, -4);
-    border:SetPoint("BOTTOMRIGHT", -37, 4);
-    options.AddFramedBackdrop(border);
+    border:SetPoint("TOPLEFT", 20, -4);
+    border:SetPoint("BOTTOMRIGHT", -20, 4);
+    options.AddOptionsPlate(border);
 
     -- Prefer the modern generic scroll frame (thin minimal scrollbar).
     local ok, scroll = pcall(CreateFrame, "ScrollFrame", nil, border, "ScrollFrameTemplate");
@@ -480,9 +530,14 @@ local function buildFontBrowser()
     return holder;
 end
 
-local function addColorSwatchRow(ui, layout, label, key)
-    ui.Custom(layout, "WIM3SettingsColorSwatchTemplate",
-        { label = label, key = key, onInit = colorRowInit });
+local function addColorPanel(ui, layout, colors)
+    ui.Custom(layout, "WIM3SettingsColorPanelTemplate", {
+        panel = true,
+        -- header (20) + gap (10) + rows at 20 spaced 10 + bottom pad.
+        extent = 30 + #colors * 30,
+        colors = colors,
+        onInit = colorPanelInit,
+    });
 end
 
 local function fontBrowserRowInit(row)
@@ -523,9 +578,9 @@ local function makeFilterHolder(isChat)
     local filterActions = {L["Allow"], L["Ignore"], L["Block"]};
 
     local border = CreateFrame("Frame", nil, holder);
-    border:SetPoint("TOPLEFT", ROW_LABEL_X, -4);
-    border:SetPoint("BOTTOMRIGHT", -37, 34);
-    options.AddFramedBackdrop(border);
+    border:SetPoint("TOPLEFT", 20, -4);
+    border:SetPoint("BOTTOMRIGHT", -20, 34);
+    options.AddOptionsPlate(border);
 
     local ok, scroll = pcall(CreateFrame, "ScrollFrame", nil, border, "ScrollFrameTemplate");
     if (not ok or not scroll) then
@@ -725,9 +780,9 @@ local function makeChannelHolder(channelType, listFun)
     holder:Hide();
 
     local border = CreateFrame("Frame", nil, holder);
-    border:SetPoint("TOPLEFT", ROW_LABEL_X, -4);
-    border:SetPoint("BOTTOMRIGHT", -37, 4);
-    options.AddFramedBackdrop(border);
+    border:SetPoint("TOPLEFT", 20, -4);
+    border:SetPoint("BOTTOMRIGHT", -20, 4);
+    options.AddOptionsPlate(border);
 
     local ok, scroll = pcall(CreateFrame, "ScrollFrame", nil, border, "ScrollFrameTemplate");
     if (not ok or not scroll) then
@@ -998,11 +1053,13 @@ RegisterModernPage(function(category, ui)
     ui.Checkbox(cat, L["Display item links when hovering over them."],
         db.hoverLinks, db, "hoverLinks");
 
-    addColorSwatchRow(ui, layout, L["Color: System Messages"], "sysMsg");
-    addColorSwatchRow(ui, layout, L["Color: Error Messages"], "errorMsg");
-    addColorSwatchRow(ui, layout, L["Color: URL - Web Addresses"], "webAddress");
-    addColorSwatchRow(ui, layout, L["Color: History Messages Sent"], "historyOut");
-    addColorSwatchRow(ui, layout, L["Color: History Messages Received"], "historyIn");
+    addColorPanel(ui, layout, {
+        { label = L["Color: System Messages"], key = "sysMsg" },
+        { label = L["Color: Error Messages"], key = "errorMsg" },
+        { label = L["Color: URL - Web Addresses"], key = "webAddress" },
+        { label = L["Color: History Messages Sent"], key = "historyOut" },
+        { label = L["Color: History Messages Received"], key = "historyIn" },
+    });
 
     -- Fonts ------------------------------------------------------------
     ui.Header(layout, L["Fonts"]);
@@ -1154,10 +1211,12 @@ RegisterModernPage(function(category, ui)
         modules.ShortcutBar.enabled, modules.ShortcutBar, "enabled", nil,
         function(value) EnableModule("ShortcutBar", value); end);
 
-    addColorSwatchRow(ui, layout, L["Color: Messages Sent"], "wispOut");
-    addColorSwatchRow(ui, layout, L["Color: Messages Received"], "wispIn");
-    addColorSwatchRow(ui, layout, L["Color: BNet Messages Sent"], "BNwispOut");
-    addColorSwatchRow(ui, layout, L["Color: BNet Messages Received"], "BNwispIn");
+    addColorPanel(ui, layout, {
+        { label = L["Color: Messages Sent"], key = "wispOut" },
+        { label = L["Color: Messages Received"], key = "wispIn" },
+        { label = L["Color: BNet Messages Sent"], key = "BNwispOut" },
+        { label = L["Color: BNet Messages Received"], key = "BNwispIn" },
+    });
 
     addPopRulesSection(cat, layout, ui, "whisper");
     addHistorySection(cat, layout, ui, false);

@@ -5,8 +5,10 @@
          The shared mixin (defined in ModernSettings.lua) forwards Init to
          the per-row data table. -->
 
-    <Frame name="WIM3SettingsColorSwatchTemplate" virtual="true" mixin="WIM3SettingsElementMixin">
-        <Size y="26"/>
+    <!-- Grouped color panel (the Accessibility > Colors construction);
+         the real height rides in on the initializer's extent. -->
+    <Frame name="WIM3SettingsColorPanelTemplate" virtual="true" mixin="WIM3SettingsElementMixin">
+        <Size y="180"/>
         <Scripts>
             <OnLoad method="OnLoad"/>
         </Scripts>

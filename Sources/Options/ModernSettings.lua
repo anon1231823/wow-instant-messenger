@@ -8,6 +8,17 @@ local table = table;
 local type = type;
 local select = select;
 
+-- Defined before the setfenv: C_Texture.GetAtlasInfo resolves the
+-- mixin of its returned struct against the calling function's
+-- environment, and WIM's namespace cannot see Vector2DMixin (the same
+-- constraint Modules/Menu.lua works around).
+local C_Texture = C_Texture;
+local function getAtlasInfo(name)
+    if (C_Texture and C_Texture.GetAtlasInfo) then
+        return C_Texture.GetAtlasInfo(name);
+    end
+end
+
 --set namespace
 setfenv(1, WIM);
 
@@ -119,25 +130,33 @@ function _G.WIM3SettingsElementMixin:Init(initializer)
     end
 end
 function _G.WIM3SettingsElementMixin:Release()
-    if (self.wimHolder) then
+    -- Only the holder's CURRENT row may hide it: this frame's pointer
+    -- goes stale when its old holder is re-attached to another row of
+    -- the same template, and hiding through the stale pointer blanked
+    -- a panel still on screen until the list re-initialized it.
+    if (self.wimHolder and self.wimHolder.wimRow == self) then
         self.wimHolder:Hide();
     end
 end
 
--- Attach a persistent holder to a pooled element row. Rows sharing a
--- template share a frame POOL: when a row scrolls out its frame is
--- released with the old holder still parented, and if that frame is
--- reused for a DIFFERENT row of the same template, two holders end up
--- SetAllPoints on one frame -- rendered exactly on top of each other.
--- Evicting any previous holder before attaching prevents that.
+-- Attach a persistent holder to a pooled element row. Rows that share a
+-- template share a frame pool. When a row scrolls out, its frame is
+-- released with the old holder still parented. If that frame is reused
+-- for a different row of the same template, two holders end up anchored
+-- to one frame and render on top of each other. Detaching the previous
+-- holder before attaching prevents that. The ownership check (wimRow)
+-- stops a stale pointer from detaching a holder that has since moved to
+-- another visible row.
 function options.AttachRowHolder(row, holder)
     local previous = row.wimHolder;
-    if (previous and previous ~= holder) then
+    if (previous and previous ~= holder and previous.wimRow == row) then
         previous:Hide();
         previous:ClearAllPoints();
         previous:SetParent(nil);
+        previous.wimRow = nil;
     end
     row.wimHolder = holder;
+    holder.wimRow = row;
     holder:SetParent(row);
     holder:ClearAllPoints();
     holder:SetAllPoints(row);
@@ -227,17 +246,54 @@ function ui.DependsOn(child, parent, predicate)
     end
 end
 
--- A custom element ROW inside a vertical layout page: instantiated from
--- one of the templates in ModernSettings.xml, whose fixed height is the
--- row's extent in the list. Silently skipped when the client lacks the
--- element-initializer API (the page simply omits the custom content).
+-- A custom element row inside a vertical layout page, created from one
+-- of the templates in ModernSettings.xml. The template's fixed height is
+-- the row's extent in the list, unless data.extent overrides it: the
+-- settings list asks the initializer first, so one template can serve
+-- panels of different sizes. data.panel registers through
+-- CreatePanelInitializer, the factory the game's own preview and color
+-- panels use. If the client lacks the element-initializer API, the row is
+-- skipped and the page omits the custom content.
 function ui.Custom(layout, template, data)
     if (not Settings.CreateElementInitializer) then
         return;
     end
-    local init = Settings.CreateElementInitializer(template, data);
+    local init;
+    if (data and data.panel and Settings.CreatePanelInitializer) then
+        init = Settings.CreatePanelInitializer(template, data);
+    else
+        init = Settings.CreateElementInitializer(template, data);
+    end
+    if (data and data.extent) then
+        init.GetExtent = function() return data.extent; end;
+    end
     layout:AddInitializer(init);
     return init;
+end
+
+-- The child plate the game's own preview areas use (the nameplate
+-- preview's construction): the options_frame_child atlas, with the
+-- standard PREVIEW tag when requested. The framed backdrop is the
+-- fallback for clients without the atlas. Returns whether the atlas was
+-- used.
+function options.AddOptionsPlate(frame, previewTag)
+    local hasAtlas = getAtlasInfo("options_frame_child");
+    if (hasAtlas) then
+        if (not frame.wimPlate) then
+            frame.wimPlate = frame:CreateTexture(nil, "BACKGROUND");
+            frame.wimPlate:SetAtlas("options_frame_child");
+            frame.wimPlate:SetAllPoints();
+        end
+        if (previewTag and not frame.wimPlateTag) then
+            frame.wimPlateTag = frame:CreateFontString(nil, "OVERLAY",
+                "GameFontHighlightSmall");
+            frame.wimPlateTag:SetPoint("TOPLEFT", 10, -10);
+            frame.wimPlateTag:SetText(_G.PREVIEW or L["Preview"]);
+        end
+    else
+        options.AddFramedBackdrop(frame);
+    end
+    return hasAtlas and true or false;
 end
 
 function ui.Slider(category, name, default, minValue, maxValue, step, dbTree, varName, tooltip, valChanged, label)
