@@ -40,8 +40,8 @@ end
 local function integrationEnabled()
     local theme = db and db.modernTheme;
     if(not (theme and theme.rpEnabled)) then return false; end
-    -- The integration belongs to the modern theme: classic skins keep
-    -- WIM's stock identity, details and class icons.
+    -- The integration is part of the modern skin. Classic skins keep
+    -- WIM's default identity, details, and class icons.
     local skin = GetSelectedSkin and GetSelectedSkin();
     return (skin and skin.modernOnly) and true or false;
 end

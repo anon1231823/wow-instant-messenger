@@ -266,12 +266,11 @@ local function createGroup(title, list, maxButtons, showNone)
 		-- current right-click menus draw), rendered as a single sliced
 		-- texture; the backdrop pair below is the fallback for skins
 		-- without it and clients without slicing or the atlas.
-		-- One stretched texture, exactly as the game's menu compositor
-		-- dresses its menus (from a live dump of an OPEN native menu):
-		-- the art is drawn as a single piece over the whole frame --
-		-- the chamfer scales with the menu -- extended 10px past the
-		-- frame horizontally and 3px vertically (the baked shadow
-		-- pad), at 0.93 alpha.
+		-- One stretched texture, as the game's menu compositor draws
+		-- it: a single piece over the whole frame -- the chamfer
+		-- scales with the menu -- extended 10px past the frame
+		-- horizontally and 3px vertically (the baked shadow pad),
+		-- at 0.93 alpha.
 		local atlas = skin.menu.background_atlas;
 		if(atlas and getAtlasInfo(atlas) and not self.wimAtlasBg) then
 			local bg = self:CreateTexture(nil, "BACKGROUND");
@@ -287,10 +286,10 @@ local function createGroup(title, list, maxButtons, showNone)
 			self.wimAtlasBg:Show();
 			-- Retire the template backdrop. ClearBackdrop runs first,
 			-- while backdropInfo is still set (it is a no-op once the
-			-- field is nil) -- but live dumps showed this client's
-			-- mixin leaving the pieces shown regardless, so they are
-			-- also hidden directly by parentKey; the fallback path's
-			-- ApplyBackdrop re-shows them for skins without the atlas.
+			-- field is nil) -- but the mixin can leave the pieces
+			-- shown regardless, so they are also hidden directly by
+			-- parentKey; the fallback path below re-shows them for
+			-- skins without the atlas.
 			if(self.ClearBackdrop) then
 				self:ClearBackdrop();
 			else
@@ -314,8 +313,7 @@ local function createGroup(title, list, maxButtons, showNone)
 			self.title.text:SetJustifyH("LEFT");
 			if(self.wimWantsDivider and not self.wimDivider) then
 				local divider = self:CreateTexture(nil, "ARTWORK");
-				-- The divider native menus draw between sections
-				-- (file id from a live dump of an open menu).
+				-- The divider native menus draw between sections.
 				divider:SetTexture(918860);
 				divider:SetHeight(13);
 				divider:SetPoint("BOTTOMLEFT", self.title, "TOPLEFT", -6, 2);
@@ -349,9 +347,7 @@ local function createGroup(title, list, maxButtons, showNone)
 			-- ApplyBackdrop does not undo an explicit Hide on the
 			-- pieces (the mixin manages only its own visibility), so a
 			-- return from an atlas-dressed skin re-shows them directly
-			-- -- the mirror of the atlas path hiding them (a live
-			-- switch to a classic skin left the menu with no background
-			-- at all, state-dump verified).
+			-- -- the mirror of the atlas path hiding them above.
 			local backdropPieces = { "TopLeftCorner", "TopRightCorner",
 				"BottomLeftCorner", "BottomRightCorner", "TopEdge",
 				"BottomEdge", "LeftEdge", "RightEdge", "Center" };

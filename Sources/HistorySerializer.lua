@@ -21,7 +21,7 @@ local floor = math.floor;
 setfenv(1, WIM);
 
 -- ---------------------------------------------------------------------------
--- History blob serializer (3.16.14+)
+-- History blob serializer
 --
 -- WHY THIS EXISTS
 --
@@ -43,7 +43,7 @@ setfenv(1, WIM);
 -- as a native nested table (hundreds of thousands of constants), it is
 -- stored as a single serialized string:
 --
---     WIM_HistoryArchive["Moon Guard"]["Bob"] = {
+--     WIM3_HistoryArchive["Moon Guard"]["Bob"] = {
 --         blob = "return {[\"Alice\"]={...}}",   -- ONE constant
 --         updated = 1714000000,
 --     }
@@ -54,8 +54,7 @@ setfenv(1, WIM);
 --
 -- Reading a blob back uses loadstring(), which compiles the blob as its own
 -- chunk. Each character therefore keeps a full, independent 262,143
--- constant budget, exactly like the per-character file did. The in-game
--- guardrail continues to cap a single character well below that.
+-- constant budget, exactly like the per-character file did.
 --
 -- FORMAT NOTES
 --

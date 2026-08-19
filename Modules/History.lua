@@ -1387,8 +1387,8 @@ local function createHistoryViewer()
             .." track="..tostring(atlasExists("!minimal-scrollbar-track-middle")));
     end
 
-    -- The native search box, reproduced from a live dump of the
-    -- Settings panel's: 8x20 border caps (the left one 5px outside the
+    -- The native search box, matching the Settings panel's
+    -- construction: 8x20 border caps (the left one 5px outside the
     -- box), a 10x10 magnifying glass at LEFT (1,-1) that lights white
     -- while the box is focused or filled, grey "Search" instructions
     -- that hide on focus, and a 17x17 clear button overlapping the
@@ -1637,7 +1637,7 @@ local function createHistoryViewer()
         return true;
     end
 
-    -- Modern Theme backgrounds: the frame fill and the two well fills
+    -- Modern skin backgrounds: the frame fill and the two well fills
     -- follow db.modernTheme (catalog keys; see Sources/Skinner.lua).
     win.ApplyChromeBackgrounds = function()
         local theme = db and db.modernTheme;

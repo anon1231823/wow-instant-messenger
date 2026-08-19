@@ -2,6 +2,7 @@
 local WIM = WIM;
 local _G = _G;
 local PlaySoundFile = PlaySoundFile;
+local pcall = pcall;
 local SML = _G.LibStub:GetLibrary("LibSharedMedia-3.0");
 local SOUND = SML.MediaType.SOUND;
 local string = string;
@@ -85,7 +86,7 @@ local function playSound(smlKey)
     local path = SML:Fetch(SOUND, smlKey);
     if path then
         enableGameSound();
-        PlaySoundFile(path, "Master");
+        pcall(PlaySoundFile, path, "Master");
     end
 end
 
@@ -183,7 +184,7 @@ function ChatSounds:PostEvent_ChatMessage(event, ...)
                         playSound(db.sounds.chat.msgin_sml);
                     end
                 end
-			elseif(event == "CLUB_MESSAGE_ADDED") then
+            elseif(event == "CLUB_MESSAGE_ADDED") then
                 local channelName = arg9;
                 local noSound = db.chat["community"] and db.chat["community"].channelSettings and
                                 db.chat["community"].channelSettings[channelName] and

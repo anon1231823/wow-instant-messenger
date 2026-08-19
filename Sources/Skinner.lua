@@ -36,9 +36,9 @@ db_defaults.skin = {
     suggest = true,
 };
 
--- Modern Theme: backgrounds and cut-out behavior for the surfaces
--- modern-only skins dress in the game's own panel art (the History
--- Viewer's chrome and the message windows).
+-- Modern skin settings: backgrounds and cut-out behavior for the
+-- surfaces that modern-only skins draw with the game's own panel art
+-- (the History Viewer frame and the message windows).
 db_defaults.modernTheme = {
     frame = "rock",
     panels = "darkmarble",
@@ -60,8 +60,8 @@ db_defaults.modernTheme = {
     rpFields = {},
 };
 
--- The panel art offered by the Modern Theme background pickers: the
--- game's own backgrounds, plus flat translucent fills.
+-- The panel art the modern skin background pickers offer: the game's
+-- own backgrounds, plus flat translucent fills.
 local CHROME_BACKGROUNDS = {
     { key = "none", label = "None (fully clear)", color = {0, 0, 0, 0} },
     { key = "transparent", label = "Transparent", color = {0, 0, 0, .55} },
@@ -405,14 +405,14 @@ function ApplySkinToWindow(obj)
     ApplyModernThemeToWindow(obj);
 end
 
--- Modern Theme on the message windows: while a modern-only skin is
--- selected, each window wears the History Viewer's construction in
--- miniature -- the standard metal nine-slice frame with a title band
--- (the conversation name in gold), the message area as a recessed
--- inset well whose fill follows the theme's message-area choice, the
--- input box in the native search-box border, and the standard red
--- corner X. Cut-out mode draws the frame fill only around the message
--- well, so a clear well background looks through to the world.
+-- Modern skin styling for the message windows. While such a skin is
+-- selected, each window uses the History Viewer's construction at a
+-- smaller size: the standard metal nine-slice frame, a title band with
+-- the conversation name in gold, the message area as a recessed inset
+-- well, the input box inside the native search-box border, and the
+-- standard red corner X. The well's fill follows the message-area
+-- setting. In cut-out mode the frame fill is drawn only around the
+-- message well, so a clear well shows the game world through it.
 local function buildWindowChrome(obj)
     local apply = _G.NineSliceUtil and _G.NineSliceUtil.ApplyLayoutByName;
     if(not apply) then return false; end
@@ -740,15 +740,11 @@ local INPUT_LEFT_PULL = 12;
 -- gives the same margin below the row as beside it.
 local WRAP_HEADROOM = 12;
 
--- The wrap mode's viewport is a plain clipping frame, scrolled by
--- anchoring the box at a negative offset (the modern scroll boxes'
--- construction) -- ScrollFrame scroll children render through a path
--- that ignores clipping on this client, state-dump verified.
--- The REAL rendered line height: the font's nominal height comes up
--- short of it (14 vs 14.22 measured), and budgeting with the nominal
--- value leaves the view fractionally smaller than its content --
--- endless sub-pixel scroll corrections that read as per-character
--- jitter and mid-glyph clipping.
+-- The rendered line height. The font's nominal height is slightly
+-- smaller than the rendered height. Budgeting with the nominal value
+-- makes the view fractionally smaller than its content, which causes
+-- endless sub-pixel scroll corrections that look like jitter while
+-- typing.
 local function boxLineHeight(obj, box)
     local inner = obj.wimBoxInnerText;
     if(not inner) then
@@ -989,9 +985,8 @@ function UpdateThemedInputDecor(obj)
 
     local text = box:GetText() or "";
     local count = #text;
-    -- The cursor-change event fires every frame while a wrapped box
-    -- has focus (probe-observed); skip the repaint when nothing it
-    -- depends on has changed.
+    -- OnCursorChanged can fire every frame while the box has focus;
+    -- skip the repaint when nothing it depends on has changed.
     local stamp = count.."|"..tostring(obj.wimInputScrollOfs).."|"
         ..tostring(box.IsMultiLine and box:IsMultiLine());
     if(obj.wimDecorStamp == stamp) then
@@ -1088,21 +1083,15 @@ function RestoreThemedInput(obj, keepLeftPull)
             scroll:Hide();
         end
         box:SetParent(obj);
-        -- Reparenting costs the box its creation-order draw priority:
-        -- left at the Backdrop's own frame level it renders under the
-        -- skin's border art (typed text only ghosted through once the
-        -- window faded; state-dump verified after a live switch to a
-        -- classic skin). Sit explicitly above the Backdrop instead.
+        -- After SetParent, the box can draw below the Backdrop because
+        -- reparenting resets the draw order between frames on the same
+        -- level. Set the box one level above the Backdrop so its text
+        -- always draws on top of the border art.
         local host = obj.widgets and obj.widgets.Backdrop;
         box:SetFrameLevel(((host and host:GetFrameLevel())
             or obj:GetFrameLevel()) + 1);
     end
     box:SetMultiLine(false);
-    -- The client anchors the caret itself on single-line boxes; the
-    -- wrap mode's manual anchoring must not linger under it.
-    if(obj.wimBoxCaret) then
-        obj.wimBoxCaret:ClearAllPoints();
-    end
     obj.wimInputRowH = nil;
     obj.wimCursorStamp = nil;
     local points = skinWidgetPoints("msg_box");
@@ -1156,10 +1145,6 @@ function LayoutThemedInput(obj)
         -- edges it fights its own content-driven height, and only a
         -- scroller can keep the cursor's line in view.
         if(not input.scroll) then
-            -- A real ScrollFrame: the client anchors the caret itself
-            -- when the box is a genuine scroll child (it never does
-            -- for a manually offset box, probe-verified), and the
-            -- scroll translation comes with it.
             local viewport = CreateFrame("ScrollFrame", nil, obj);
             viewport:SetFrameLevel(obj:GetFrameLevel() + 1);
             viewport.parentWindow = obj;
@@ -1283,12 +1268,10 @@ function LayoutThemedInput(obj)
                 if(obj.wimCursorStamp == stamp) then return; end
                 obj.wimCursorStamp = stamp;
                 -- Keep the cursor's line inside the viewport, with a
-                -- 2px margin so the line never sits flush against
-                -- (or under) the border art. The cursor's reported
-                -- offset excludes the text insets while the text
-                -- renders below them (state-dump measured: the
-                -- follow landed exactly one top-inset short), so the
-                -- inset joins the cursor coordinates.
+                -- 2px margin so the line never touches the border art.
+                -- The reported cursor offset excludes the text insets
+                -- while the text renders below them, so add the inset
+                -- to the cursor coordinates.
                 local _, _, insetTop = self:GetTextInsets();
                 local view = s:GetHeight() or 0;
                 local offset = obj.wimInputScrollOfs or 0;
@@ -1413,9 +1396,8 @@ function ApplyModernThemeToWindow(obj)
     bd.l:SetShown(skinShown); bd.r:SetShown(skinShown);
     bd.bg:SetShown(skinShown);
     -- Themed windows show the class icon only as the circled portrait
-    -- (below); without the portrait layout the icon would poke outside
-    -- the window's top-left over the chrome (a live dump measured it
-    -- 10px past the edge).
+    -- (below). Without the portrait layout the icon would extend past
+    -- the window's top-left corner, over the chrome.
     if(widgets.class_icon) then
         local hasPortrait = obj.wimChrome and obj.wimChrome.hasPortrait;
         widgets.class_icon:SetShown(skinShown or (chrome ~= nil and hasPortrait and true or false));
@@ -1444,12 +1426,11 @@ function ApplyModernThemeToWindow(obj)
         if(obj.wimBoxInScroll or obj.wimBoxBaseInsets) then
             RestoreThemedInput(obj, false);
         end
-        -- The skin pass resets these widgets before this teardown
-        -- deliberately runs last -- but UpdateCharDetails sits between
-        -- the two and its themed wrap re-laid the header while the
-        -- chrome was still shown (a live switch to a classic skin left
-        -- the message area on the themed anchors, state-dump
-        -- verified). Hand them back to the skin's own geometry.
+        -- The skin pass resets these widgets, and this teardown runs
+        -- last by design. UpdateCharDetails runs between the two, and
+        -- its themed wrapper lays the header out again while the
+        -- chrome is still shown. Return the header widgets to the
+        -- skin's own geometry here.
         if(obj.wimFromBaseFont) then
             ApplySkinToWidget(widgets.chat_display);
             if(widgets.from) then
@@ -1595,13 +1576,12 @@ function ApplyModernThemeToWindow(obj)
         icon:SetSize(56, 56);
         if(not obj.wimPortraitMask) then
             local mask = icon:GetParent():CreateMaskTexture();
-            -- CircleMaskScalable's circle reaches the mask's edges
-            -- (the portrait alpha-mask file bakes in padding that
-            -- shrank the visible circle short of the ring). The atlas
-            -- path is the reliable one -- a mask fed the file id
-            -- directly reports as attached yet fails to clip in some
-            -- sessions (state-dump verified both ways) -- with the
-            -- file id kept as the fallback.
+            -- CircleMaskScalable's circle reaches the mask's edges,
+            -- while the portrait alpha-mask file has built-in padding
+            -- that leaves the visible circle short of the ring. The
+            -- atlas path is also the reliable one: a mask given the
+            -- file id directly can report as attached yet fail to
+            -- clip. The file id stays as the fallback.
             local usedAtlas = mask.SetAtlas
                 and pcall(mask.SetAtlas, mask, "CircleMaskScalable")
                 and mask:GetAtlas() ~= nil;

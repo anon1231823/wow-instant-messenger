@@ -1,10 +1,10 @@
 -- WIM Modern: a dark, minimal skin that follows the look of the game's
--- current native UI panels. It is registered as a delta over WIM Classic,
--- so widget layout, class icons, emoticons and anything else not defined
+-- current UI panels. It is registered as a delta over WIM Classic, so
+-- widget layout, class icons, emoticons, and anything else not defined
 -- here is inherited unchanged.
 --
--- The textures are generated flat geometry; see
--- tools/generate_modern_skin_assets.py in the repository for the source.
+-- The textures are script-generated flat geometry, with no hand-drawn
+-- art.
 
 local path = "Interface\\AddOns\\"..WIM.addonTocName.."\\Skins\\Modern\\";
 
@@ -14,7 +14,7 @@ local goldR, goldG, goldB = GameFontNormal:GetTextColor();
 local WIM_ModernSkin = {
     title = "WIM Modern",
     version = "1.0.0",
-    author = "WIM",
+    author = "Avraelore (Moon Guard)",
     website = "https://github.com/Legacy-of-Sylvanaar/wow-instant-messenger",
     -- Offered only where the caller asks for modern-only skins (the
     -- modern options UI). See GetRegisteredSkins.

@@ -7,19 +7,17 @@ local WIM = WIM;
 -- event WIM manages and writes each one, with its arguments, to the on-disk
 -- debug log.
 --
--- The point is to record what the CLIENT actually delivers, independently of
--- what WIM does with it and independently of what any chat frame renders.
--- Those three had been conflated during the community send investigation: the
--- captures showed WIM's CHAT_MSG_COMMUNITIES_CHANNEL message filter never
--- running, which was read as "the event never fired". That inference is not
--- sound -- an AddMessageEventFilter callback only runs when some chat frame is
+-- The goal is to record what the client actually delivers, separately from
+-- what WIM does with it and from what any chat frame renders. These three
+-- are easy to confuse. For example, "WIM's CHAT_MSG_COMMUNITIES_CHANNEL
+-- message filter never ran" does not prove "the event never fired": an
+-- AddMessageEventFilter callback only runs when some chat frame is
 -- registered for the event and dispatches it through
--- ChatFrame_MessageEventHandler, so "no filter ran" and "no event fired" are
--- different statements. This frame is registered by WIM alone and answers the
--- second question directly.
+-- ChatFrame_MessageEventHandler. This frame is registered by WIM alone and
+-- answers the event-level question directly.
 --
--- Cost: nothing at level 0 or 1. The frame registers no events until level 2 is
--- set, so a normal session pays only this file's load.
+-- Cost: nothing at level 0 or 1. The frame registers no events until level
+-- 2 is set, so a normal session pays only this file's load.
 
 local ARG_LIMIT = 12;   -- chat events carry 11-17 args; the tail is rarely useful
 local STR_LIMIT = 90;   -- per-argument truncation, well under the per-line cap
@@ -49,6 +47,10 @@ local TRACE_EVENTS = {
     "CLUB_STREAMS_LOADED", "CLUB_ADDED", "CLUB_REMOVED",
     -- Channel list churn, which the stream focus pass keys off
     "CHANNEL_UI_UPDATE", "CHANNEL_COUNT_UPDATE",
+    -- Session anchor. Marks login, reload, and instance transitions, so
+    -- the order of everything above can be read relative to "world
+    -- entered". (arg1 = isInitialLogin, arg2 = isReloadingUi.)
+    "PLAYER_ENTERING_WORLD",
 };
 
 local function fmtArg(v)

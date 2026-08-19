@@ -132,8 +132,8 @@ end
 function _G.WIM3SettingsElementMixin:Release()
     -- Only the holder's CURRENT row may hide it: this frame's pointer
     -- goes stale when its old holder is re-attached to another row of
-    -- the same template, and hiding through the stale pointer blanked
-    -- a panel still on screen until the list re-initialized it.
+    -- the same template, and hiding through the stale pointer blanks
+    -- a panel still on screen.
     if (self.wimHolder and self.wimHolder.wimRow == self) then
         self.wimHolder:Hide();
     end

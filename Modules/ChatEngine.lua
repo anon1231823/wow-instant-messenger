@@ -1604,7 +1604,7 @@ local function reAddCommunityChannels(force)
 			-- The name+colour form is the one verified to restore the entry under
 			-- 12.1. The ids form is a last resort only: despite matching FrameXML's
 			-- declared add signature, in practice it registers a junk channel
-			-- literally named "<clubId>" (12.1 capture, 19:58:26).
+			-- literally named "<clubId>".
 			local okAdd, errAdd = pcall(add, frame, name, color);
 			if (not frameHasChannel(frame, name)) then
 				local okIds, errIds = pcall(add, frame, cid, sid);

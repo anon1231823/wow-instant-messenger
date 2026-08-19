@@ -1324,9 +1324,9 @@ RegisterModernPage(function(category, ui)
     addSoundPair(cat, ui, L["Play sound when a message is sent."], db.sounds.chat, "msgout", "msgout_sml");
 end);
 
--- ------------------------------------------------------- Modern Theme
--- Settings that only affect modern-only skins; every control is
--- modifiable only while one is selected (SkinLocksOptionsStyle).
+-- -------------------------------------------------------- Modern Skin
+-- Settings that only affect modern-only skins. Every control can be
+-- changed only while one is selected (SkinLocksOptionsStyle).
 local modernThemeNoteHolder;
 local function modernThemeNoteInit(row)
     if (not modernThemeNoteHolder) then
@@ -1345,7 +1345,7 @@ local function modernThemeNoteInit(row)
 end
 
 RegisterModernPage(function(category, ui)
-    local cat, layout = ui.Subcategory(category, L["Modern Theme"]);
+    local cat, layout = ui.Subcategory(category, L["Modern Skin"]);
 
     local modernActive = function() return SkinLocksOptionsStyle(); end;
 

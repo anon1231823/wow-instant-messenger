@@ -65,6 +65,48 @@ delivered events in, what arguments they carried, and which of WIM's
 handlers ran -- three things that cannot be reconstructed from a screenshot
 or a description after the fact.
 
+## UI state snapshots (`/wim snap`)
+
+The debug log answers *what happened*; the snapshot tool answers *what the
+UI looks like right now*. `/wim snap` serializes the live widget state of
+the frames WIM styles -- every region's resolved rectangle, anchor chain,
+texture/atlas, texture coordinates, colors, fonts and visibility -- so a
+layout or skin problem can be diagnosed numerically instead of guessed at
+from a screenshot.
+
+| Command | What it captures |
+|---------|------------------|
+| `/wim snap` | Nothing -- prints the available arguments. |
+| `/wim snap all` | Everything WIM styles: every message window (shown or hidden, full widget trees), the History Viewer, the options windows, the menu, the minimap button, plus the native Settings widgets WIM's styling is modeled on. Also takes a screenshot of the same moment. |
+| `/wim snap <Frame.Dot.Path>` | One frame by global dot-path, e.g. `/wim snap WIM3_msgFrame1` or `/wim snap SettingsPanel.SearchBox`. |
+| `/wim snapmenu` | Arms a one-shot capture of the next context menu while it is open (menus strip their art when released, so they must be captured live). |
+
+Snapshots land in the per-character SavedVariable `WIM3_Snapshots` (the
+same `WIM.lua` file as the debug log) and are written to disk on logout or
+`/reload`, like any SavedVariable. Snapshots accumulate -- each capture adds
+an entry rather than overwriting the last, so a before/after pair around a
+reproduction is one file.
+
+Every snapshot records the build that produced it (`addonBuild`, stamped by
+the packaging script; `dev` when running from the source tree), and the
+confirmation line in chat prints it. When testing a fix, check that value
+against the build you meant to install before drawing any conclusions.
+
+## Which tool for which problem
+
+- **Behavioral** (messages not routed, history missing, events mishandled,
+  errors during login): the **debug log**. Level 2 if chat events are
+  involved, level 1 otherwise.
+- **Visual** (overlapping or misplaced widgets, wrong textures or colors,
+  skin regressions, layout drift after resizing or reskinning): a
+  **snapshot** -- `/wim snap all` in the broken state, plus one after a
+  `/reload` if the reload changes anything (the difference between the two
+  is usually the bug).
+- **Both** (something looks wrong *and* misbehaves, or the problem appears
+  only after a sequence of events): capture both -- set the debug level
+  first, reproduce, `/wim snap all`, then `/reload` to flush everything to
+  disk in one file.
+
 ## Related diagnostic commands
 
 - `/wim focusstreams` -- A/B switch for WIM's community-stream focus pass at

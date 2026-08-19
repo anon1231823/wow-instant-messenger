@@ -21,7 +21,7 @@ local flag_combat = false;
 local flag_resting = IsResting();
 
 -- register events directly with main frame in order to preserve correct state when WIM is disabled.
-local workerFrame = getglobal("WIM_workerFrame");
+local workerFrame = _G["WIM_workerFrame"];
 
 -- combat detection
 workerFrame:RegisterEvent("PLAYER_REGEN_DISABLED");
