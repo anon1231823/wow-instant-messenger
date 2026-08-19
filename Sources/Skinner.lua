@@ -1088,7 +1088,14 @@ function RestoreThemedInput(obj, keepLeftPull)
             scroll:Hide();
         end
         box:SetParent(obj);
-        box:SetFrameLevel(obj:GetFrameLevel() + 1);
+        -- Reparenting costs the box its creation-order draw priority:
+        -- left at the Backdrop's own frame level it renders under the
+        -- skin's border art (typed text only ghosted through once the
+        -- window faded; state-dump verified after a live switch to a
+        -- classic skin). Sit explicitly above the Backdrop instead.
+        local host = obj.widgets and obj.widgets.Backdrop;
+        box:SetFrameLevel(((host and host:GetFrameLevel())
+            or obj:GetFrameLevel()) + 1);
     end
     box:SetMultiLine(false);
     -- The client anchors the caret itself on single-line boxes; the
@@ -1436,6 +1443,22 @@ function ApplyModernThemeToWindow(obj)
         -- scroller, single-line again, with skin anchors and insets.
         if(obj.wimBoxInScroll or obj.wimBoxBaseInsets) then
             RestoreThemedInput(obj, false);
+        end
+        -- The skin pass resets these widgets before this teardown
+        -- deliberately runs last -- but UpdateCharDetails sits between
+        -- the two and its themed wrap re-laid the header while the
+        -- chrome was still shown (a live switch to a classic skin left
+        -- the message area on the themed anchors, state-dump
+        -- verified). Hand them back to the skin's own geometry.
+        if(obj.wimFromBaseFont) then
+            ApplySkinToWidget(widgets.chat_display);
+            if(widgets.from) then
+                ApplySkinToWidget(widgets.from);
+            end
+            if(widgets.char_info) then
+                ApplySkinToWidget(widgets.char_info);
+                widgets.char_info:SetSpacing(0);
+            end
         end
         return;
     end

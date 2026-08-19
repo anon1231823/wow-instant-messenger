@@ -39,7 +39,11 @@ end
 
 local function integrationEnabled()
     local theme = db and db.modernTheme;
-    return (theme and theme.rpEnabled) and true or false;
+    if(not (theme and theme.rpEnabled)) then return false; end
+    -- The integration belongs to the modern theme: classic skins keep
+    -- WIM's stock identity, details and class icons.
+    local skin = GetSelectedSkin and GetSelectedSkin();
+    return (skin and skin.modernOnly) and true or false;
 end
 
 -- Returns the installed profile viewer, if any: Total RP 3's register
@@ -374,6 +378,13 @@ function RPProfiles:OnDisable()
         refreshTicker:Cancel();
         refreshTicker = nil;
     end
+    RefreshRPProfiles();
+end
+
+-- A skin switch changes the integration's gate (a modern skin must be
+-- active), so every window applies or removes its profile identity
+-- when the skin changes.
+function RPProfiles:OnSkinLoaded()
     RefreshRPProfiles();
 end
 

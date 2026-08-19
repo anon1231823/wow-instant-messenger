@@ -1345,7 +1345,7 @@ RegisterModernPage(function(category, ui)
     table.insert(backgroundControls, wrapLimit);
     ui.DependsOn(wrapLimit, wrapControl);
     local wrapLines = ui.Slider(cat, L["Visible input lines"],
-        db.modernTheme.inputWrapLines, 1, 6, 1, db.modernTheme, "inputWrapLines",
+        db.modernTheme.inputWrapLines, 1, 20, 1, db.modernTheme, "inputWrapLines",
         L["The most lines the input field grows to before the message scrolls inside it."],
         reapply);
     table.insert(backgroundControls, wrapLines);

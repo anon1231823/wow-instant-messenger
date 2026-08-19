@@ -346,6 +346,21 @@ local function createGroup(title, list, maxButtons, showNone)
 			};
 
 			self:ApplyBackdrop();
+			-- ApplyBackdrop does not undo an explicit Hide on the
+			-- pieces (the mixin manages only its own visibility), so a
+			-- return from an atlas-dressed skin re-shows them directly
+			-- -- the mirror of the atlas path hiding them (a live
+			-- switch to a classic skin left the menu with no background
+			-- at all, state-dump verified).
+			local backdropPieces = { "TopLeftCorner", "TopRightCorner",
+				"BottomLeftCorner", "BottomRightCorner", "TopEdge",
+				"BottomEdge", "LeftEdge", "RightEdge", "Center" };
+			for i=1, #backdropPieces do
+				local piece = self[backdropPieces[i]];
+				if(piece and piece.Show) then
+					piece:Show();
+				end
+			end
 			self.title.bg:Show();
 			self.title.text:SetJustifyH("RIGHT");
 			if(self.wimDivider) then

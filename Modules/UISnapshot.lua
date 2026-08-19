@@ -37,6 +37,7 @@ setfenv(1, WIM);
 local fixedTargets = {
     "WIM3_HistoryFrame",
     "WIM3_Options",
+    "WIM3Menu",
     "WIM_LastModernMenu",
     "LibDBIcon10_WIM",
     "SettingsPanel.Container.SettingsList.ScrollBar",
@@ -332,26 +333,141 @@ SnapshotTarget = takeSnapshot;
 RegisterSlashCommand("snap", takeSnapshot,
     L["Snapshot UI widget state for skin development: /wim snap all | <Frame.Dot.Path> (bare /wim snap lists the arguments)."]);
 -- Live probe for the themed input row: prints wheel deliveries,
--- cursor changes and a once-a-second caret/focus/geometry line to
--- chat, so input behavior is observed instead of inferred. Run again
--- to stop.
-local probeTicker;
-local function inputProbe()
-    -- Probe lines land in chat AND in the snapshot SavedVariable, so
-    -- a /reload flushes them to disk like everything else.
-    local function say(msg)
-        _G.DEFAULT_CHAT_FRAME:AddMessage("|cff69ccf0WIM probe:|r "..msg);
-        _G.WIM3_Snapshots = _G.WIM3_Snapshots or { snaps = {} };
-        local log = _G.WIM3_Snapshots.probe;
-        if (not log) then
-            log = {};
-            _G.WIM3_Snapshots.probe = log;
-        end
-        table.insert(log, _G.date("%H:%M:%S").." "..msg);
-        while (#log > 300) do
-            table.remove(log, 1);
+-- REAL cursor moves (identical repeats are only counted, never
+-- printed -- an event storm would flush everything else out of the
+-- capped log) and a once-a-second state line with the fire and
+-- setter counters, so input behavior is observed instead of
+-- inferred. Run again to stop.
+-- Probe lines land in chat AND in the snapshot SavedVariable, so a
+-- /reload flushes them to disk like everything else.
+local function probeSay(msg)
+    _G.DEFAULT_CHAT_FRAME:AddMessage("|cff69ccf0WIM probe:|r "..msg);
+    _G.WIM3_Snapshots = _G.WIM3_Snapshots or { snaps = {} };
+    local log = _G.WIM3_Snapshots.probe;
+    if (not log) then
+        log = {};
+        _G.WIM3_Snapshots.probe = log;
+    end
+    table.insert(log, _G.date("%H:%M:%S").." "..msg);
+    while (#log > 300) do
+        table.remove(log, 1);
+    end
+end
+
+local function findCaret(box)
+    for _, region in ipairs({ box:GetRegions() }) do
+        if (region.GetObjectType and region:GetObjectType() == "Texture"
+                and math.abs((region:GetWidth() or 0) - 2) < 1.5) then
+            return region;
         end
     end
+end
+
+local function caretReport(box)
+    local caret = findCaret(box);
+    if (not caret) then
+        return "caret not found";
+    end
+    local line = string.format("caret shown=%s pts=%d alpha=%s layer=%s",
+        tostring(caret:IsShown()), caret:GetNumPoints(),
+        tostring(rnd(caret:GetAlpha())),
+        tostring(caret.GetDrawLayer and caret:GetDrawLayer()));
+    local left, bottom = caret:GetLeft(), caret:GetBottom();
+    if (left and bottom) then
+        return line..string.format(" at (%.0f, %.0f)", left, bottom);
+    end
+    return line.." no rect";
+end
+
+-- Every-frame method traffic on the box, counted per second: a
+-- nonzero steady count names whatever keeps the text layout dirty.
+local tracedSetters = { "SetText", "SetWidth", "SetHeight",
+    "SetTextInsets", "SetCursorPosition", "SetPoint", "SetAlpha" };
+local function traceSetters(box)
+    if (box.wimProbeCounts) then return; end
+    box.wimProbeCounts = {};
+    for i = 1, #tracedSetters do
+        local name = tracedSetters[i];
+        _G.hooksecurefunc(box, name, function(self)
+            local counts = self.wimProbeCounts;
+            counts[name] = (counts[name] or 0) + 1;
+        end);
+    end
+end
+
+local function setterReport(box)
+    local counts = box.wimProbeCounts;
+    if (not counts) then return ""; end
+    local parts = {};
+    for i = 1, #tracedSetters do
+        local name = tracedSetters[i];
+        if (counts[name] and counts[name] > 0) then
+            table.insert(parts, name.."="..counts[name]);
+            counts[name] = 0;
+        end
+    end
+    if (#parts == 0) then return ""; end
+    return " set["..table.concat(parts, " ").."]";
+end
+
+-- Control rig: a bare multi-line EditBox in a stock ScrollFrame with
+-- default everything. If ITS caret renders and its OnCursorChanged
+-- only fires on real moves, the client is fine and the delta to
+-- WIM's box is the bug; if it misbehaves the same way, the client
+-- itself does.
+local labFrame;
+local function toggleLab()
+    if (labFrame) then
+        if (labFrame:IsShown()) then
+            labFrame:Hide();
+            probeSay("lab hidden.");
+        else
+            labFrame:Show();
+            labFrame.box:SetFocus();
+        end
+        return;
+    end
+    labFrame = _G.CreateFrame("Frame", "WIM3_InputLab", _G.UIParent);
+    labFrame:SetSize(320, 76);
+    labFrame:SetPoint("CENTER", 0, 220);
+    labFrame:SetFrameStrata("DIALOG");
+    local bg = labFrame:CreateTexture(nil, "BACKGROUND");
+    bg:SetAllPoints();
+    bg:SetColorTexture(0, 0, 0, 0.75);
+    local scroll = _G.CreateFrame("ScrollFrame", nil, labFrame);
+    scroll:SetPoint("TOPLEFT", 8, -8);
+    scroll:SetPoint("BOTTOMRIGHT", -8, 8);
+    local eb = _G.CreateFrame("EditBox", nil, scroll);
+    eb:SetMultiLine(true);
+    eb:SetFontObject(_G.ChatFontNormal);
+    eb:SetWidth(304);
+    eb:SetAutoFocus(false);
+    eb:SetScript("OnEscapePressed", function(self) self:ClearFocus(); end);
+    scroll:SetScrollChild(eb);
+    labFrame.box = eb;
+    labFrame.cc = 0;
+    eb:HookScript("OnCursorChanged", function()
+        labFrame.cc = labFrame.cc + 1;
+    end);
+    _G.C_Timer.NewTicker(1, function()
+        if (not labFrame:IsShown()) then return; end
+        probeSay(string.format("lab cc/s=%d focus=%s | %s",
+            labFrame.cc, tostring(eb:HasFocus()), caretReport(eb)));
+        labFrame.cc = 0;
+    end);
+    labFrame:Show();
+    eb:SetFocus();
+    probeSay("lab up: type in the floating box; /wim inputprobe lab"
+        .." toggles it away.");
+end
+
+local probeTicker;
+local function inputProbe(arg)
+    if (type(arg) == "string" and string.lower(arg) == "lab") then
+        toggleLab();
+        return;
+    end
+    local say = probeSay;
     if (probeTicker) then
         probeTicker:Cancel();
         probeTicker = nil;
@@ -383,47 +499,35 @@ local function inputProbe()
         box:HookScript("OnMouseWheel", function(_, delta)
             say("box wheel "..delta.." ofs="..tostring(target.wimInputScrollOfs));
         end);
-        box:HookScript("OnCursorChanged", function(_, _, y, _, h)
-            say(string.format("cursor y=%.1f h=%.1f ofs=%.1f",
+        box.wimProbeCC = 0;
+        box:HookScript("OnCursorChanged", function(self, x, y, _, h)
+            self.wimProbeCC = (self.wimProbeCC or 0) + 1;
+            local stamp = tostring(x).."|"..tostring(y).."|"..tostring(h);
+            if (self.wimProbeStamp == stamp) then return; end
+            self.wimProbeStamp = stamp;
+            say(string.format("cursor MOVED y=%.1f h=%.1f ofs=%.1f",
                 y or 0, h or 0, target.wimInputScrollOfs or 0));
         end);
+        traceSetters(box);
     end
     probeTicker = _G.C_Timer.NewTicker(1, function()
         if (not (box and box.GetRegions)) then return; end
-        local caret;
-        for _, region in ipairs({ box:GetRegions() }) do
-            if (region.GetObjectType and region:GetObjectType() == "Texture"
-                    and math.abs((region:GetWidth() or 0) - 2) < 1.5) then
-                caret = region;
-                break;
-            end
-        end
-        local line = string.format("focus=%s multi=%s boxH=%s viewH=%s ofs=%s",
+        local line = string.format("focus=%s multi=%s boxH=%s viewH=%s ofs=%s cc/s=%d",
             tostring(box:HasFocus()), tostring(box:IsMultiLine()),
             tostring(rnd(box:GetHeight())),
             tostring(viewport and rnd(viewport:GetHeight())),
-            tostring(rnd(target.wimInputScrollOfs or 0)));
-        if (caret) then
-            line = line..string.format(" | caret shown=%s pts=%d alpha=%s",
-                tostring(caret:IsShown()), caret:GetNumPoints(),
-                tostring(rnd(caret:GetAlpha())));
-            local left, bottom = caret:GetLeft(), caret:GetBottom();
-            if (left and bottom) then
-                line = line..string.format(" at (%.0f, %.0f)", left, bottom);
-            else
-                line = line.." no rect";
-            end
-        else
-            line = line.." | caret not found";
-        end
-        say(line);
+            tostring(rnd(target.wimInputScrollOfs or 0)),
+            box.wimProbeCC or 0);
+        box.wimProbeCC = 0;
+        say(line.." | "..caretReport(box)..setterReport(box));
     end);
     say("on: wheel/cursor hooks live, state line every second."
-        .." Type in the box, wheel over it, then /wim inputprobe to stop.");
+        .." Type in the box, wheel over it, then /wim inputprobe to stop."
+        .." /wim inputprobe lab raises a stock control box.");
 end
 
 RegisterSlashCommand("inputprobe", inputProbe,
-    L["Toggle a live probe of the themed input row (prints to chat)."]);
+    L["Toggle a live probe of the themed input row (prints to chat); 'lab' toggles a stock control box."]);
 
 RegisterSlashCommand("snapmenu", function()
         snapNextMenu = true;
