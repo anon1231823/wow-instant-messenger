@@ -1045,12 +1045,11 @@ function UpdateThemedInputDecor(obj)
         if(theme.inputWrapLimit) then
             local capLines = theme.inputWrapLines or 2;
             if(capLines < 1) then capLines = 1; end
-            if(capLines > 6) then capLines = 6; end
+            if(capLines > 20) then capLines = 20; end
             if(lines > capLines) then lines = capLines; end
         end
-        -- One REAL line height per line plus the viewport margins and
-        -- box insets (4+2 each side); one line lands on the
-        -- single-line row's 26.
+        -- One rendered line height per line, plus the viewport margins
+        -- (6px each side). One line equals the single-line row's 26.
         local rowHeight = lines * lineHeight + 12;
         if(rowHeight < 26) then rowHeight = 26; end
         if(rowHeight ~= obj.wimInputRowH) then
@@ -1098,6 +1097,7 @@ function RestoreThemedInput(obj, keepLeftPull)
         obj.wimBoxCaret:ClearAllPoints();
     end
     obj.wimInputRowH = nil;
+    obj.wimCursorStamp = nil;
     local points = skinWidgetPoints("msg_box");
     if(points) then
         -- Themed (keepLeftPull): symmetric side offsets from the frame
@@ -1196,10 +1196,12 @@ function LayoutThemedInput(obj)
             if(string.find(p[1], "RIGHT")) then rightX = p[4] or rightX; end
             if(string.find(p[1], "BOTTOM")) then bottomY = p[5] or bottomY; end
         end
-        -- The art host (input) takes the row's footprint; the clip
-        -- viewport sits 4px inside it vertically -- 1px inside the
-        -- border lines, which the art draws 3px in -- so scrolled-out
-        -- text is cut before it can reach the border, above or below.
+        -- The art host (input) takes the row's footprint. The clip
+        -- viewport sits 6px inside it vertically, which is 3px inside
+        -- the border lines (the art draws them 3px in), so scrolled-out
+        -- text is clipped before it reaches the border. The viewport
+        -- margins provide all of the vertical spacing; the box itself
+        -- keeps zero vertical text insets (see the inset block below).
         input:ClearAllPoints();
         input:SetPoint("BOTTOMLEFT", obj, "BOTTOMLEFT",
             leftX - INPUT_LEFT_PULL, bottomY);
@@ -1208,8 +1210,8 @@ function LayoutThemedInput(obj)
         obj.wimInputRowH = obj.wimInputRowH or 26;
         input:SetHeight(obj.wimInputRowH);
         scroll:ClearAllPoints();
-        scroll:SetPoint("TOPLEFT", input, "TOPLEFT", 0, -4);
-        scroll:SetPoint("BOTTOMRIGHT", input, "BOTTOMRIGHT", 0, 4);
+        scroll:SetPoint("TOPLEFT", input, "TOPLEFT", 0, -6);
+        scroll:SetPoint("BOTTOMRIGHT", input, "BOTTOMRIGHT", 0, 6);
         obj.wimBoxExtra = (obj.wimInputRowH - 26) + WRAP_HEADROOM;
         scroll:Show();
 
@@ -1265,8 +1267,16 @@ function LayoutThemedInput(obj)
             box:HookScript("OnCursorChanged", function(self, x, y, _, height)
                 local s = chrome.input and chrome.input.scroll;
                 if(not (s and obj.wimBoxInScroll and y)) then return; end
+                -- The box can recalculate its text layout without a
+                -- real caret move; the event then fires every frame
+                -- with the same values. Follow only actual movement,
+                -- or every wheel scroll snaps back to the caret's line
+                -- one frame later.
+                local stamp = tostring(x).."|"..y.."|"..(height or 0);
+                if(obj.wimCursorStamp == stamp) then return; end
+                obj.wimCursorStamp = stamp;
                 -- Keep the cursor's line inside the viewport, with a
-                -- 6px margin so the line never sits flush against
+                -- 2px margin so the line never sits flush against
                 -- (or under) the border art. The cursor's reported
                 -- offset excludes the text insets while the text
                 -- renders below them (state-dump measured: the
@@ -1302,21 +1312,14 @@ function LayoutThemedInput(obj)
         local l, r, t, b = box:GetTextInsets();
         obj.wimBoxBaseInsets = { l or 0, r or 0, t or 0, b or 0 };
     end
-    -- The text takes the full row in both modes (the counter lives on
-    -- its own strip below the row). A multi-line box top-aligns its
-    -- text where the single-line box centers it, so the wrap mode
-    -- carries vertical insets that put its first line exactly where
-    -- the single-line row draws its only one.
+    -- The text uses the full row in both modes; the counter has its
+    -- own strip. Keep the vertical text insets at their base values in
+    -- wrap mode. Extra vertical insets on a multi-line box make the
+    -- client recalculate the text layout every frame: OnCursorChanged
+    -- fires continuously and the caret never renders. The viewport
+    -- margins provide the vertical spacing instead.
     local insets = obj.wimBoxBaseInsets;
-    if(wraps) then
-        -- 2px box insets on top of the viewport's 4px margins: one
-        -- line plus both equals the single-line row exactly, and
-        -- every line keeps the single-line text's clearance to the
-        -- border art.
-        box:SetTextInsets(insets[1], insets[2], insets[3] + 2, insets[4] + 2);
-    else
-        box:SetTextInsets(insets[1], insets[2], insets[3], insets[4]);
-    end
+    box:SetTextInsets(insets[1], insets[2], insets[3], insets[4]);
 
     -- Changing wrap modes re-feeds the text. The box only lays its
     -- content out again on a text change, and setting the same string

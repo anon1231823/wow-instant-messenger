@@ -5,7 +5,7 @@
 
 local translations = {
     ["WIM (WoW Instant Messenger)"] = "WIM (WoW Instant Messenger)",
-    ["_Description"] = "WIM es un addon que aporta una sensación familiar a la comunicación a través del chat en The World of Warcraft. En esta pantalla podrá personalizar WIM para adaptarlo a tus necesidades.",
+    ["_Description"] = "WIM es un addon que aporta una sensación familiar a la comunicación a través del chat en World of Warcraft. En esta pantalla podrá personalizar WIM para adaptarlo a tus necesidades.",
 
     ["_DemoText"] = "Esta es una ventana de demostración y no es completamente funcional. Coloca esta ventana en el lugar donde deseas que aparezcan todas las demás ventanas. Cuando termines, puedes cerrar esta ventana y su configuración se guardará.",
 
@@ -152,8 +152,9 @@ local translations = {
     ["Unknown"] = "Desconocido",
     ["Click to update..."] = "Haz clic para actualizar...",
     ["Invite to Party"] = "Invitar al grupo",
+    ["Invite to Guild"] = "Invitar a la hermandad",
     ["Add Friend"] = "Añadir amigo",
-    ["Ignore User"] = "Ignorar jugador",
+    ["Ignore Player"] = "Ignorar jugador",
     ["Are you sure you want to\nignore %s?"] = "¿Estás seguro de que quieres\nignorar a %s?",
     ["Right-Click for profile links..."] = "Haz clic derecho para enlaces de perfil...",
     ["Profile Links"] = "Enlaces de perfil",

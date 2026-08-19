@@ -2428,6 +2428,7 @@ local function loadChatOptions()
                     f.sub.list.buttons[i].neverSuppress:SetChecked(db.chat[channelType].channelSettings[name] and db.chat[channelType].channelSettings[name].neverSuppress);
                     f.sub.list.buttons[i].showAlerts:SetChecked(db.chat[channelType].channelSettings[name] and db.chat[channelType].channelSettings[name].showAlerts);
                     f.sub.list.buttons[i].noHistory:SetChecked(db.chat[channelType].channelSettings[name] and db.chat[channelType].channelSettings[name].noHistory);
+                    f.sub.list.buttons[i].noSound:SetChecked(db.chat[channelType].channelSettings[name] and db.chat[channelType].channelSettings[name].noSound);
                     local color = _G.ChatTypeInfo["CHANNEL"..channelNumber] or _G.NORMAL_FONT_COLOR;
 
 					if (isCommunityChannel) then
@@ -2690,6 +2691,11 @@ local function loadChatOptions()
         local f = createChannelChatTemplate(L["Community Chat"], "community", getCommunityGroupList);
         return f;
     end
+
+    -- Exposed for the modern options UI (Sources/Options/ModernOptions.lua):
+    -- the channel enumerations live in this scope.
+    GetOptionsChannelList = getChannelList;
+    GetOptionsCommunityList = getCommunityGroupList;
 
     RegisterOptionFrame(L["Chat"], _G.GUILD, createGuildChat);
     RegisterOptionFrame(L["Chat"], _G.GUILD_RANK1_DESC, createOfficerChat);
