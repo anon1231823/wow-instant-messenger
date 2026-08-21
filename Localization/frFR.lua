@@ -225,7 +225,7 @@ WIM.AddLocale("frFR", {
     ["Message Formatting"] = "Format d'un message",
     ["Manipulate how WIM displays messages."] = "Manipulez la façon dont WIM affiche les messages.",
     ["Preview"] = "Aperçu",
-    ["Display Time Stamps"] = "Afficher le temps",
+    ["Display Time Stamps"] = "Afficher les horodatages",
     ["Display Emoticons"] = "Afficher les émoticônes",
     ["Display URLs as Links"] = "Afficher les URLs comme les liens",
     ["Indent long messages."] = "Indenter les longs messages",
@@ -423,13 +423,192 @@ WIM.AddLocale("frFR", {
 	["Red"] = "Rouge",
 	["Yellow"] = "Jaune",
 
-	-- Consolidation des amis Battle.net (Visionneuse d'historique)
+	-- Battle.net friend consolidation (History Viewer)
 	["Battle.net Friends"] = "Amis Battle.net",
 	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "Êtes-vous sûr de vouloir supprimer tout l'historique enregistré avec %s, sur tous les royaumes et tous les personnages de ce compte ?",
 
-	-- Suppression par date depuis la liste des filtres de la visionneuse d'historique
+	-- Per-date deletion from the History Viewer filter list
 	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "Êtes-vous sûr de vouloir supprimer l'historique du %s avec %s sur tous les royaumes et personnages de ce compte ?",
 	["Are you sure you want to delete the %s history for %s across every character on %s?"] = "Êtes-vous sûr de vouloir supprimer l'historique du %s de %s sur tous les personnages de %s ?",
 	["Are you sure you want to delete the %s history for %s on %s?"] = "Êtes-vous sûr de vouloir supprimer l'historique du %s de %s sur %s ?",
+
+
+	-- Modern options panel --
+	["Use modern options UI"] = "Utiliser l'interface d'options moderne",
+	["Classic Options"] = "Options classiques",
+	["Open"] = "Ouvrir",
+	["Open the classic WIM options window."] = "Ouvre la fenêtre d'options classiques de WIM.",
+	["Choose the options style: /wim style [classic|modern]."] = "Choisissez le style d'options : /wim style [classic|modern].",
+	["When enabled, WIM's Options entry points (minimap menu, key binding, /wim) open this panel instead of the classic WIM options window."] = "Lorsque cette option est activée, les points d'accès aux options de WIM (menu de la minicarte, raccourci clavier, /wim) ouvrent ce panneau au lieu de la fenêtre d'options classiques de WIM.",
+	["While a modern-only skin (such as WIM Modern) is selected, this option is enforced: those skins are configured through this panel only."] = "Quand un habillage exclusivement moderne (tel que WIM Modern) est sélectionné, cette option est imposée : ces habillages se configurent uniquement via ce panneau.",
+
+	-- Modern skin styling --
+	["Modern Skin"] = "Habillage moderne",
+	["These settings style WIM's modern-only skins (such as WIM Modern), which are built from the game's own interface art. They shape the History Viewer and the chat windows, and are available only while a modern-only skin is selected under General > Display Settings; with a classic skin active they are greyed out."] = "Ces paramètres stylisent les habillages exclusivement modernes de WIM (tels que WIM Modern), construits à partir des éléments d'interface du jeu. Ils façonnent la visionneuse d'historique et les fenêtres de discussion, et ne sont disponibles que lorsqu'un habillage exclusivement moderne est sélectionné sous Général > Paramètres d'affichage ; avec un habillage classique actif, ils sont grisés.",
+	["Disabled while a modern-only skin (such as WIM Modern) is selected: those skins carry settings the classic window has no controls for."] = "Désactivé tant qu'un habillage exclusivement moderne (tel que WIM Modern) est sélectionné : ces habillages comportent des paramètres pour lesquels la fenêtre classique n'a aucun contrôle.",
+	["Frame background"] = "Arrière-plan du cadre",
+	["Message area background"] = "Arrière-plan de la zone de messages",
+	["Chat history background"] = "Arrière-plan de l'historique de discussion",
+	["Selection panels background"] = "Arrière-plan des panneaux de sélection",
+	["Window frame background"] = "Arrière-plan du cadre de la fenêtre",
+	["None (game default)"] = "Aucun (valeur du jeu)",
+	["Panels see through to the game world"] = "Les panneaux laissent voir le monde du jeu",
+	["Window sees through to the game world"] = "La fenêtre laisse voir le monde du jeu",
+	["Draws the frame background only around the panels, so a clear panel background (None or Transparent) shows the game world behind the viewer instead of the frame fill."] = "Dessine l'arrière-plan du cadre uniquement autour des panneaux, afin qu'un arrière-plan de panneau transparent (Aucun ou Transparent) laisse voir le monde du jeu derrière la visionneuse au lieu du remplissage du cadre.",
+	["Draws the window frame background only around the message area, so a clear message area background (None or Transparent) shows the game world behind the window."] = "Dessine l'arrière-plan du cadre de la fenêtre uniquement autour de la zone de messages, afin qu'un arrière-plan de zone de messages transparent (Aucun ou Transparent) laisse voir le monde du jeu derrière la fenêtre.",
+
+	-- Roleplay profiles (Total RP 3 / Mary Sue Protocol) --
+	["Roleplay Profiles"] = "Profils de jeu de rôle",
+	["Enable roleplay profile integration"] = "Activer l'intégration des profils de jeu de rôle",
+	["Whisper windows show roleplay profile fields from Total RP 3 or any Mary Sue Protocol addon, and gain an Open RP Profile button on their shortcut bar that opens the partner's profile in the installed viewer."] = "Les fenêtres de chuchotement affichent les champs de profil de jeu de rôle de Total RP 3 ou de tout addon Mary Sue Protocol, et gagnent un bouton « Ouvrir le profil RP » dans leur barre de raccourcis qui ouvre le profil de votre interlocuteur dans la visionneuse installée.",
+	["Open RP Profile"] = "Ouvrir le profil RP",
+	["Displayed profile fields"] = "Champs de profil affichés",
+	["Whisper windows show the selected fields from the partner's Total RP 3 or Mary Sue Protocol profile. Fields left unselected -- or without profile data -- keep the standard display."] = "Les fenêtres de chuchotement affichent les champs sélectionnés du profil Total RP 3 ou Mary Sue Protocol de votre interlocuteur. Les champs non sélectionnés -- ou sans données de profil -- conservent l'affichage standard.",
+	["First Name"] = "Prénom",
+	["Last Name"] = "Nom",
+	["Title"] = "Titre",
+	["Full Title"] = "Titre complet",
+	["Race"] = "Race",
+	["Class"] = "Classe",
+	["Portrait"] = "Portrait",
+	["Name & Class Color"] = "Couleur du nom et de la classe",
+	["The profile's first name, shown as the window's name text."] = "Le prénom du profil, affiché comme texte du nom de la fenêtre.",
+	["The profile's last name, shown as the window's name text."] = "Le nom du profil, affiché comme texte du nom de la fenêtre.",
+	["The short title, shown on the window's details line."] = "Le titre court, affiché sur la ligne de détails de la fenêtre.",
+	["The long title, shown on the window's details line and portrait tooltip."] = "Le titre long, affiché sur la ligne de détails de la fenêtre et dans l'infobulle du portrait.",
+	["The custom race, replacing the character's race on the details line."] = "La race personnalisée, remplaçant la race du personnage sur la ligne de détails.",
+	["The custom class, replacing the character's class on the details line."] = "La classe personnalisée, remplaçant la classe du personnage sur la ligne de détails.",
+	["The profile's icon, replacing the class icon."] = "L'icône du profil, remplaçant l'icône de classe.",
+	["The profile's custom color, applied to the window's name text and to the class on the details line."] = "La couleur personnalisée du profil, appliquée au texte du nom de la fenêtre et à la classe sur la ligne de détails.",
+	["Apply filter to character menus"] = "Appliquer le filtre aux menus de personnage",
+
+	-- History Viewer filters --
+	["No Filter"] = "Aucun filtre",
+	["Relative Dates"] = "Dates relatives",
+	["%d or more"] = "%d ou plus",
+	["Fewer than %d"] = "Moins de %d",
+	["Results Filtered"] = "Résultats filtrés",
+	["-- Results Filtered --"] = "-- Résultats filtrés --",
+	["Results are hidden by the active filter. Click to open the Filters menu."] = "Les résultats sont masqués par le filtre actif. Cliquez pour ouvrir le menu des filtres.",
+	["Click to change how history is filtered."] = "Cliquez pour modifier le filtrage de l'historique.",
+	["Click to open the Filters menu."] = "Cliquez pour ouvrir le menu des filtres.",
+	["Clicking the %s button on the message window will show that user's history in WIM's History Viewer."] = "Un clic sur le bouton %s de la fenêtre de message affichera l'historique de cet utilisateur dans la visionneuse d'historique de WIM.",
+
+	-- Message input & formatting --
+	["Wrap the message being typed"] = "Retour à la ligne du message en cours de saisie",
+	["Limit wrapped lines"] = "Limiter les lignes renvoyées",
+	["Visible input lines"] = "Lignes de saisie visibles",
+	["Caps how far the input field grows; past the limit the message scrolls inside it."] = "Limite la croissance du champ de saisie ; au-delà de la limite, le message défile à l'intérieur.",
+	["The most lines the input field grows to before the message scrolls inside it."] = "Le nombre maximal de lignes que le champ de saisie peut atteindre avant que le message ne défile à l'intérieur.",
+	["The input field wraps long messages onto multiple lines, growing downward with the message instead of scrolling it on one line."] = "Le champ de saisie renvoie les longs messages sur plusieurs lignes, en s'étendant vers le bas avec le message au lieu de le faire défiler sur une seule ligne.",
+	["Timestamp Format"] = "Format de l'horodatage",
+	["Bracket Style"] = "Style des crochets",
+	["Colors"] = "Couleurs",
+	["Sound"] = "Son",
+
+	-- Chat type options --
+	["Chat Windows"] = "Fenêtres de discussion",
+	["Monitor"] = "Surveiller",
+	["Record"] = "Enregistrer",
+	["Minimap Alerts"] = "Alertes de minicarte",
+
+	-- Help, bug reports & links --
+	["Found a bug?"] = "Un bug ?",
+	["Report a Bug"] = "Signaler un bug",
+	["Reports are welcome! Click below and follow the instructions in the bug report template."] = "Les rapports sont les bienvenus ! Cliquez ci-dessous et suivez les instructions du modèle de rapport de bug.",
+	["Visit us on GitHub"] = "Retrouvez-nous sur GitHub",
+	["Click to copy the link."] = "Cliquez pour copier le lien.",
+	["Press Ctrl+C to copy the link, then open it in your browser."] = "Appuyez sur Ctrl+C pour copier le lien, puis ouvrez-le dans votre navigateur.",
+
+	-- Debugging & development slash commands --
+	["Clear the captured debug log."] = "Efface le journal de débogage capturé.",
+	["Set debugging level: /wim debug [0|1|2]. 2 adds verbose chat event tracing."] = "Définit le niveau de débogage : /wim debug [0|1|2]. 2 ajoute un traçage détaillé des événements de discussion.",
+	["Snapshot the next modern context menu while it is open."] = "Capture le prochain menu contextuel moderne pendant qu'il est ouvert.",
+	["Snapshot UI widget state for skin development: /wim snap all | <Frame.Dot.Path> (bare /wim snap lists the arguments)."] = "Capture l'état des widgets de l'interface pour le développement d'habillages : /wim snap all | <Frame.Dot.Path> (/wim snap sans argument liste les possibilités).",
+
+	-- Tutorials & notices --
+	["WIM is currently running. To access WIM's wide array of options type:"] = "WIM est actuellement en cours d'exécution. Pour accéder à la vaste gamme d'options de WIM, tapez :",
+	["WIM's message window has been hidden to WIM's Minimap Icon. If you want to end a conversation, you may do so by <Shift-Clicking> the close button."] = "La fenêtre de message a été masquée vers l'icône de minicarte de WIM. Si vous souhaitez mettre fin à une conversation, vous pouvez le faire en <Maj-Clic> sur le bouton de fermeture.",
+	["If you want all windows to be this size, you can set the default window size within WIM's options."] = "Si vous voulez que toutes les fenêtres aient cette taille, vous pouvez définir la taille de fenêtre par défaut dans les options de WIM.",
+	["You can <Shift-Click> a tab and drag it out into it's own window."] = "Vous pouvez <Maj-cliquer> un onglet et le faire glisser hors de son groupe pour en faire une fenêtre à part.",
+	["You received a whisper which was hidden due to your current activity. You can change how whispers behave in WIM's options by typing"] = "Vous avez reçu un chuchotement qui a été masqué en raison de votre activité actuelle. Vous pouvez modifier le comportement des chuchotements dans les options de WIM en tapant",
+	["Sets the game's Social > Whisper Mode setting to In-line. Without it, suppressed whispers would vanish into a popout chat tab."] = "Règle le paramètre « Social > Mode de chuchotement » du jeu sur « En ligne ». Sans cela, les chuchotements supprimés disparaîtraient dans un onglet contextuel de discussion.",
+
+	-- Community channel maintenance --
+	["Toggle the experimental community channel re-add repair (mutates chat window channels)."] = "Active la réparation expérimentale de réajout des canaux de communauté (modifie les canaux des fenêtres de discussion).",
+	["Toggle whether WIM focuses community streams at login."] = "Détermine si WIM met en avant les flux de communauté à la connexion.",
+
+	-- Misc --
+	["Age"] = "Âge",
+	["Users in %s"] = "Utilisateurs dans %s",
+
+	-- History Viewer filter modes --
+	["Sent by Me"] = "Envoyé par moi",
+	["Sent by Them"] = "Envoyés par eux",
+	["Active Days"] = "Jours actifs",
+	["Last 1 Day"] = "Dernier jour",
+	["Last 7 Days"] = "7 derniers jours",
+	["Last 30 Days"] = "30 derniers jours",
+	["Last 90 Days"] = "90 derniers jours",
+
+
+	-- Chrome background names --
+	["None (fully clear)"] = "Aucun (totalement transparent)",
+	["Transparent"] = "Transparent",
+	["Rock"] = "Roche",
+	["Marble"] = "Marbre",
+	["Dark Marble"] = "Marbre sombre",
+	["Bank"] = "Banque",
+	["Guild Vault"] = "Coffre de guilde",
+	["Dark Sandstone"] = "Grès sombre",
+	["Parchment (Tileable)"] = "Parchemin (répétable)",
+	["Quest Parchment"] = "Parchemin de quête",
+	["Raid Frame"] = "Cadre de raid",
+	["Destiny"] = "Destin",
+	["Stationery (Auction)"] = "Papeterie (Hôtel des ventes)",
+	["Stationery (Illustrated)"] = "Papeterie (illustrée)",
+	["Stationery (Orgrimmar)"] = "Papeterie (Orgrimmar)",
+	["Stationery (Thunder Bluff)"] = "Papeterie (Pitons du Tonnerre)",
+	["Stationery (Undercity)"] = "Papeterie (Fossoyeuse)",
+	["Stationery (Plain)"] = "Papeterie (simple)",
+	["World Map 1"] = "Carte du monde 1",
+	["World Map 2"] = "Carte du monde 2",
+	["Achievement Stats"] = "Statistiques de hauts faits",
+	["Adventure Map Parchment"] = "Parchemin de carte d'aventure",
+	["Collections"] = "Collections",
+	["Frame: Alliance"] = "Cadre : Alliance",
+	["Frame: Horde"] = "Cadre : Horde",
+	["Frame: Neutral"] = "Cadre : Neutre",
+	["Frame: Marine"] = "Cadre : Marine",
+	["Frame: Mechagon"] = "Cadre : Méchagon",
+	["Frame: Kyrian"] = "Cadre : Kyrians",
+	["Frame: Necrolord"] = "Cadre : Nécroseigneurs",
+	["Frame: Night Fae"] = "Cadre : Cour des Fées",
+	["Frame: Venthyr"] = "Cadre : Venthyr",
+	["Frame: Oribos"] = "Cadre : Oribos",
+	["Frame: Dragonflight"] = "Cadre : Dragonflight",
+	["Frame: The War Within"] = "Cadre : The War Within",
+	["Class Hall"] = "Salles de classe",
+	["Class Hall (Internal)"] = "Salles de classe (interne)",
+	["Garrison Landing Page"] = "Page d'accueil de la garnison",
+	["Garrison Mission"] = "Mission de garnison",
+	["Ship Mission Parchment"] = "Parchemin de mission navale",
+	["Garrison UI"] = "Interface de garnison",
+	["Garrison UI 2"] = "Interface de garnison 2",
+	["Credits: Classic"] = "Générique : Classic",
+	["Credits: Burning Crusade"] = "Générique : Burning Crusade",
+	["Credits: Wrath"] = "Générique : Wrath",
+	["Credits: Cataclysm"] = "Générique : Cataclysm",
+	["Credits: Mists of Pandaria"] = "Générique : Mists of Pandaria",
+	["Credits: Warlords"] = "Générique : Warlords",
+	["Credits: Legion"] = "Générique : Legion",
+	["Credits: Battle for Azeroth"] = "Générique : Battle for Azeroth",
+
+
+	-- Skin & options style notices --
+	["WIM: the selected skin (%s) is configured through the modern options UI; the classic window is unavailable while it is active."] = "WIM : l'habillage sélectionné (%s) se configure via l'interface d'options moderne ; la fenêtre classique n'est pas disponible tant qu'il est actif.",
+	["WIM: the selected skin (%s) requires the modern options UI; switch to another skin first."] = "WIM : l'habillage sélectionné (%s) requiert l'interface d'options moderne ; passe d'abord à un autre habillage.",
+	["WIM options style: Modern (native Options > AddOns)."] = "Style d'options de WIM : moderne (natif, dans Options > AddOns).",
+	["WIM options style: Classic (WIM window)."] = "Style d'options de WIM : classique (fenêtre WIM).",
 
 });

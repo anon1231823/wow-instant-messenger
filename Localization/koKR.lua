@@ -422,13 +422,192 @@ WIM.AddLocale("koKR", {
     ["Red"] = "빨간색",
     ["Yellow"] = "노란색",
 
-    -- 배틀닷넷 친구 통합 (기록 뷰어)
+    -- Battle.net friend consolidation (History Viewer)
     ["Battle.net Friends"] = "배틀닷넷 친구",
     ["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "모든 서버 및 이 계정의 모든 캐릭터에 걸쳐 %s와(과) 저장된 모든 기록을 삭제하시겠습니까?",
 
-    -- 기록 뷰어 필터 목록에서 날짜별 삭제
+    -- Per-date deletion from the History Viewer filter list
     ["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "%s 날짜의 %s와(과)의 기록을 모든 서버 및 이 계정의 모든 캐릭터에서 삭제하시겠습니까?",
     ["Are you sure you want to delete the %s history for %s across every character on %s?"] = "%s 날짜의 %s에 대한 기록을 %s의 모든 캐릭터에서 삭제하시겠습니까?",
     ["Are you sure you want to delete the %s history for %s on %s?"] = "%s 날짜의 %s에 대한 %s에서의 기록을 삭제하시겠습니까?",
+
+
+    -- Modern options panel --
+    ["Use modern options UI"] = "현대식 옵션 UI 사용",
+    ["Classic Options"] = "클래식 옵션",
+    ["Open"] = "열기",
+    ["Open the classic WIM options window."] = "클래식 WIM 옵션 창을 엽니다.",
+    ["Choose the options style: /wim style [classic|modern]."] = "옵션 스타일을 선택합니다: /wim style [classic|modern].",
+    ["When enabled, WIM's Options entry points (minimap menu, key binding, /wim) open this panel instead of the classic WIM options window."] = "활성화하면 WIM 옵션 진입점(미니맵 메뉴, 단축키, /wim)이 클래식 WIM 옵션 창 대신 이 패널을 엽니다.",
+    ["While a modern-only skin (such as WIM Modern) is selected, this option is enforced: those skins are configured through this panel only."] = "전용 현대식 스킨(예: WIM Modern)이 선택되어 있는 동안에는 이 옵션이 강제됩니다. 그런 스킨은 이 패널에서만 설정할 수 있습니다.",
+
+    -- Modern skin styling --
+    ["Modern Skin"] = "현대식 스킨",
+    ["These settings style WIM's modern-only skins (such as WIM Modern), which are built from the game's own interface art. They shape the History Viewer and the chat windows, and are available only while a modern-only skin is selected under General > Display Settings; with a classic skin active they are greyed out."] = "이 설정들은 게임 자체 인터페이스 아트로 만들어진 WIM의 전용 현대식 스킨(예: WIM Modern)의 모양을 정합니다. 기록 뷰어와 채팅 창의 형태를 결정하며, 일반 > 표시 설정에서 전용 현대식 스킨이 선택되어 있을 때만 사용할 수 있습니다. 클래식 스킨 사용 중에는 회색으로 비활성화됩니다.",
+    ["Disabled while a modern-only skin (such as WIM Modern) is selected: those skins carry settings the classic window has no controls for."] = "전용 현대식 스킨(예: WIM Modern)이 선택되어 있는 동안에는 비활성화입니다. 해당 스킨에는 클래식 창에 없는 컨트롤의 설정이 포함되어 있습니다.",
+    ["Frame background"] = "프레임 배경",
+    ["Message area background"] = "메시지 영역 배경",
+    ["Chat history background"] = "채팅 기록 배경",
+    ["Selection panels background"] = "선택 패널 배경",
+    ["Window frame background"] = "창 프레임 배경",
+    ["None (game default)"] = "없음(게임 기본값)",
+    ["Panels see through to the game world"] = "패널이 게임 세계를 비추어 봅니다",
+    ["Window sees through to the game world"] = "창이 게임 세계를 비추어 봅니다",
+    ["Draws the frame background only around the panels, so a clear panel background (None or Transparent) shows the game world behind the viewer instead of the frame fill."] = "프레임 배경을 패널 주위에만 그립니다. 따라서 패널 배경이 투명(없음 또는 반투명)하면 뷰어 뒤에 프레임 채우기 대신 게임 세계가 보입니다.",
+    ["Draws the window frame background only around the message area, so a clear message area background (None or Transparent) shows the game world behind the window."] = "창 프레임 배경을 메시지 영역 주위에만 그립니다. 따라서 메시지 영역 배경이 투명(없음 또는 반투명)하면 창 뒤에 게임 세계가 보입니다.",
+
+    -- Roleplay profiles (Total RP 3 / Mary Sue Protocol) --
+    ["Roleplay Profiles"] = "역할플레이 프로필",
+    ["Enable roleplay profile integration"] = "역할플레이 프로필 연동 활성화",
+    ["Whisper windows show roleplay profile fields from Total RP 3 or any Mary Sue Protocol addon, and gain an Open RP Profile button on their shortcut bar that opens the partner's profile in the installed viewer."] = "귓속말 창에 Total RP 3 또는 Mary Sue Protocol 애드온의 역할플레이 프로필 필드를 표시하고, 단축 바에 상대방의 프로필을 설치된 뷰어로 여는 'RP 프로필 열기' 버튼이 추가됩니다.",
+    ["Open RP Profile"] = "RP 프로필 열기",
+    ["Displayed profile fields"] = "표시할 프로필 필드",
+    ["Whisper windows show the selected fields from the partner's Total RP 3 or Mary Sue Protocol profile. Fields left unselected -- or without profile data -- keep the standard display."] = "귓속말 창에 상대방의 Total RP 3 또는 Mary Sue Protocol 프로필에서 선택한 필드를 표시합니다. 선택하지 않았거나 프로필 데이터가 없는 필드는 기본 표시를 유지합니다.",
+    ["First Name"] = "이름",
+    ["Last Name"] = "성",
+    ["Title"] = "칭호",
+    ["Full Title"] = "전체 칭호",
+    ["Race"] = "종족",
+    ["Class"] = "직업",
+    ["Portrait"] = "초상화",
+    ["Name & Class Color"] = "이름 및 직업 색상",
+    ["The profile's first name, shown as the window's name text."] = "프로필의 이름으로, 창의 이름 텍스트로 표시됩니다.",
+    ["The profile's last name, shown as the window's name text."] = "프로필의 성으로, 창의 이름 텍스트로 표시됩니다.",
+    ["The short title, shown on the window's details line."] = "짧은 칭호로, 창의 세부 정보 줄에 표시됩니다.",
+    ["The long title, shown on the window's details line and portrait tooltip."] = "긴 칭호로, 창의 세부 정보 줄과 초상화 툴팁에 표시됩니다.",
+    ["The custom race, replacing the character's race on the details line."] = "사용자 지정 종족으로, 세부 정보 줄에서 캐릭터의 종족을 대체합니다.",
+    ["The custom class, replacing the character's class on the details line."] = "사용자 지정 직업으로, 세부 정보 줄에서 캐릭터의 직업을 대체합니다.",
+    ["The profile's icon, replacing the class icon."] = "프로필의 아이콘으로, 직업 아이콘을 대체합니다.",
+    ["The profile's custom color, applied to the window's name text and to the class on the details line."] = "프로필의 사용자 지정 색상으로, 창의 이름 텍스트와 세부 정보 줄의 직업에 적용됩니다.",
+    ["Apply filter to character menus"] = "캐릭터 메뉴에 필터 적용",
+
+    -- History Viewer filters --
+    ["No Filter"] = "필터 없음",
+    ["Relative Dates"] = "상대 날짜",
+    ["%d or more"] = "%d개 이상",
+    ["Fewer than %d"] = "%d개 미만",
+    ["Results Filtered"] = "결과 필터링됨",
+    ["-- Results Filtered --"] = "-- 결과 필터링됨 --",
+    ["Results are hidden by the active filter. Click to open the Filters menu."] = "활성 필터 때문에 결과가 숨겨져 있습니다. 클릭하여 필터 메뉴를 엽니다.",
+    ["Click to change how history is filtered."] = "클릭하여 기록 필터 방식을 변경합니다.",
+    ["Click to open the Filters menu."] = "클릭하여 필터 메뉴를 엽니다.",
+    ["Clicking the %s button on the message window will show that user's history in WIM's History Viewer."] = "메시지 창의 %s 버튼을 클릭하면 그 사용자의 기록이 WIM 기록 뷰어에 표시됩니다.",
+
+    -- Message input & formatting --
+    ["Wrap the message being typed"] = "입력 중인 메시지 줄바꿈",
+    ["Limit wrapped lines"] = "줄바꿈 행 수 제한",
+    ["Visible input lines"] = "표시 입력 줄 수",
+    ["Caps how far the input field grows; past the limit the message scrolls inside it."] = "입력 필드가 늘어나는 한도를 정합니다. 한도를 넘으면 메시지가 필드 안에서 스크롤됩니다.",
+    ["The most lines the input field grows to before the message scrolls inside it."] = "메시지가 필드 안에서 스크롤되기 전까지 입력 필드가 늘어날 수 있는 최대 줄 수입니다.",
+    ["The input field wraps long messages onto multiple lines, growing downward with the message instead of scrolling it on one line."] = "입력 필드는 긴 메시지를 여러 줄로 줄바꿈하여 한 줄 스크롤 대신 메시지와 함께 아래로 늘어납니다.",
+    ["Timestamp Format"] = "시간 표시 형식",
+    ["Bracket Style"] = "괄호 스타일",
+    ["Colors"] = "색상",
+    ["Sound"] = "소리",
+
+    -- Chat type options --
+    ["Chat Windows"] = "채팅 창",
+    ["Monitor"] = "감시",
+    ["Record"] = "기록",
+    ["Minimap Alerts"] = "미니맵 알림",
+
+    -- Help, bug reports & links --
+    ["Found a bug?"] = "버그를 찾으셨나요?",
+    ["Report a Bug"] = "버그 신고",
+    ["Reports are welcome! Click below and follow the instructions in the bug report template."] = "버그 보고를 환영합니다! 아래를 클릭하여 버그 보고 양식의 지침을 따라 주세요.",
+    ["Visit us on GitHub"] = "GitHub에서 만나요",
+    ["Click to copy the link."] = "클릭하여 링크를 복사합니다.",
+    ["Press Ctrl+C to copy the link, then open it in your browser."] = "Ctrl+C를 눌러 링크를 복사한 뒤 브라우저에서 여세요.",
+
+    -- Debugging & development slash commands --
+    ["Clear the captured debug log."] = "캡처된 디버그 로그를 지웁니다.",
+    ["Set debugging level: /wim debug [0|1|2]. 2 adds verbose chat event tracing."] = "디버깅 수준을 설정합니다: /wim debug [0|1|2]. 2는 자세한 채팅 이벤트 추적을 추가합니다.",
+    ["Snapshot the next modern context menu while it is open."] = "열려 있는 다음 현대식 컨텍스트 메뉴의 스냅샷을 찍습니다.",
+    ["Snapshot UI widget state for skin development: /wim snap all | <Frame.Dot.Path> (bare /wim snap lists the arguments)."] = "스킨 개발을 위해 UI 위젯 상태를 기록합니다: /wim snap all | <Frame.Dot.Path> (인수 없이 /wim snap을 입력하면 목록이 표시됩니다).",
+
+    -- Tutorials & notices --
+    ["WIM is currently running. To access WIM's wide array of options type:"] = "WIM이 실행 중입니다. WIM의 다양한 옵션에 접근하려면 다음을 입력하세요:",
+    ["WIM's message window has been hidden to WIM's Minimap Icon. If you want to end a conversation, you may do so by <Shift-Clicking> the close button."] = "메시지 창이 WIM 미니맵 아이콘으로 숨겨졌습니다. 대화를 끝내려면 닫기 버튼을 <Shift-클릭>하세요.",
+    ["If you want all windows to be this size, you can set the default window size within WIM's options."] = "모든 창을 이 크기로 하려면 WIM 옵션에서 기본 창 크기를 설정할 수 있습니다.",
+    ["You can <Shift-Click> a tab and drag it out into it's own window."] = "<Shift-클릭>으로 탭을 잡아 끌어 별도의 창으로 분리할 수 있습니다.",
+    ["You received a whisper which was hidden due to your current activity. You can change how whispers behave in WIM's options by typing"] = "현재 활동 때문에 숨겨진 귓속말을 받았습니다. WIM 옵션에서 귓속말 동작 방식을 변경하려면 다음을 입력하세요",
+    ["Sets the game's Social > Whisper Mode setting to In-line. Without it, suppressed whispers would vanish into a popout chat tab."] = "게임의 '소셜 > 귓속말 모드' 설정을 '인라인'으로 맞춥니다. 그렇지 않으면 숨겨진 귓속말이 팝아웃 채팅 탭으로 사라집니다.",
+
+    -- Community channel maintenance --
+    ["Toggle the experimental community channel re-add repair (mutates chat window channels)."] = "실험적인 커뮤니티 채널 재참여 복구를 켭니다(채팅 창 채널을 변경합니다).",
+    ["Toggle whether WIM focuses community streams at login."] = "로그인 시 WIM이 커뮤니티 스트림을 포커스할지 정합니다.",
+
+    -- Misc --
+    ["Age"] = "나이",
+    ["Users in %s"] = "%s의 사용자",
+
+    -- History Viewer filter modes --
+    ["Sent by Me"] = "내가 보냄",
+    ["Sent by Them"] = "상대가 보냄",
+    ["Active Days"] = "활동한 날",
+    ["Last 1 Day"] = "지난 1일",
+    ["Last 7 Days"] = "지난 7일",
+    ["Last 30 Days"] = "지난 30일",
+    ["Last 90 Days"] = "지난 90일",
+
+
+    -- Chrome background names --
+    ["None (fully clear)"] = "없음(완전히 투명)",
+    ["Transparent"] = "투명",
+    ["Rock"] = "바위",
+    ["Marble"] = "대리석",
+    ["Dark Marble"] = "어두운 대리석",
+    ["Bank"] = "은행",
+    ["Guild Vault"] = "길드 은행",
+    ["Dark Sandstone"] = "어두운 사암",
+    ["Parchment (Tileable)"] = "양피지(타일형)",
+    ["Quest Parchment"] = "퀘스트 양피지",
+    ["Raid Frame"] = "공격대 프레임",
+    ["Destiny"] = "운명",
+    ["Stationery (Auction)"] = "편지지(경매장)",
+    ["Stationery (Illustrated)"] = "편지지(삽화)",
+    ["Stationery (Orgrimmar)"] = "편지지(오그리마)",
+    ["Stationery (Thunder Bluff)"] = "편지지(썬더 블러프)",
+    ["Stationery (Undercity)"] = "편지지(언더시티)",
+    ["Stationery (Plain)"] = "편지지(기본)",
+    ["World Map 1"] = "세계 지도 1",
+    ["World Map 2"] = "세계 지도 2",
+    ["Achievement Stats"] = "업적 통계",
+    ["Adventure Map Parchment"] = "모험 지도 양피지",
+    ["Collections"] = "수집품",
+    ["Frame: Alliance"] = "프레임: 얼라이언스",
+    ["Frame: Horde"] = "프레임: 호드",
+    ["Frame: Neutral"] = "프레임: 중립",
+    ["Frame: Marine"] = "프레임: 해군",
+    ["Frame: Mechagon"] = "프레임: 메카곤",
+    ["Frame: Kyrian"] = "프레임: 크리안",
+    ["Frame: Necrolord"] = "프레임: 네크로로드",
+    ["Frame: Night Fae"] = "프레임: 밤의 요정",
+    ["Frame: Venthyr"] = "프레임: 벤시르",
+    ["Frame: Oribos"] = "프레임: 오리보스",
+    ["Frame: Dragonflight"] = "프레임: 용군단",
+    ["Frame: The War Within"] = "프레임: 내부의 전쟁",
+    ["Class Hall"] = "직업 전당",
+    ["Class Hall (Internal)"] = "직업 전당(내부)",
+    ["Garrison Landing Page"] = "주둔지 상륙 페이지",
+    ["Garrison Mission"] = "주둔지 임무",
+    ["Ship Mission Parchment"] = "함선 임무 양피지",
+    ["Garrison UI"] = "주둔지 UI",
+    ["Garrison UI 2"] = "주둔지 UI 2",
+    ["Credits: Classic"] = "크레딧: 클래식",
+    ["Credits: Burning Crusade"] = "크레딧: 불타는 성전",
+    ["Credits: Wrath"] = "크레딧: 리치 왕의 분노",
+    ["Credits: Cataclysm"] = "크레딧: 대격변",
+    ["Credits: Mists of Pandaria"] = "크레딧: 판다리아의 안개",
+    ["Credits: Warlords"] = "크레딧: 드레노어의 전쟁군주",
+    ["Credits: Legion"] = "크레딧: 군단",
+    ["Credits: Battle for Azeroth"] = "크레딧: 아제로스의 전쟁",
+
+
+    -- Skin & options style notices --
+    ["WIM: the selected skin (%s) is configured through the modern options UI; the classic window is unavailable while it is active."] = "WIM: 선택한 스킨(%s)은(는) 현대식 옵션 UI를 통해 설정됩니다. 활성화된 동안에는 클래식 창을 사용할 수 없습니다.",
+    ["WIM: the selected skin (%s) requires the modern options UI; switch to another skin first."] = "WIM: 선택한 스킨(%s)은(는) 현대식 옵션 UI가 필요합니다. 먼저 다른 스킨으로 전환해야 합니다.",
+    ["WIM options style: Modern (native Options > AddOns)."] = "WIM 옵션 스타일: 현대식 (게임 내 옵션 > 애드온).",
+    ["WIM options style: Classic (WIM window)."] = "WIM 옵션 스타일: 클래식 (WIM 창).",
 
 });

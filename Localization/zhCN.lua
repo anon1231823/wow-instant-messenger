@@ -226,7 +226,7 @@ WIM.AddLocale("zhCN", {
     ["Message Formatting"] = "消息格式",
     ["Manipulate how WIM displays messages."] = "控制WIM如何显示消息。",
     ["Preview"] = "预览",
-    ["Display Time Stamps"] = "显示时间",
+    ["Display Time Stamps"] = "显示时间戳",
     ["Display Emoticons"] = "显示表情",
     ["Display URLs as Links"] = "显示网址链接",
 	["Indent long messages."] = "折叠长信息。",
@@ -423,13 +423,192 @@ WIM.AddLocale("zhCN", {
 	["Red"] = "红色",
 	["Yellow"] = "黄色",
 
-	-- 战网好友合并（历史记录查看器）
+	-- Battle.net friend consolidation (History Viewer)
 	["Battle.net Friends"] = "战网好友",
 	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "你确定要删除与 %s 在本账号所有服务器、所有角色上的全部历史记录吗？",
 
-	-- 从历史记录查看器的过滤列表中按日期删除
+	-- Per-date deletion from the History Viewer filter list
 	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "你确定要删除 %s 当天与 %s 在本账号所有服务器和角色上的历史记录吗？",
 	["Are you sure you want to delete the %s history for %s across every character on %s?"] = "你确定要删除 %s 当天 %s 在 %s 所有角色上的历史记录吗？",
 	["Are you sure you want to delete the %s history for %s on %s?"] = "你确定要删除 %s 当天 %s 在 %s 的历史记录吗？",
+
+
+	-- Modern options panel --
+	["Use modern options UI"] = "使用现代选项界面",
+	["Classic Options"] = "经典选项",
+	["Open"] = "打开",
+	["Open the classic WIM options window."] = "打开经典 WIM 选项窗口。",
+	["Choose the options style: /wim style [classic|modern]."] = "选择选项样式：/wim style [classic|modern]。",
+	["When enabled, WIM's Options entry points (minimap menu, key binding, /wim) open this panel instead of the classic WIM options window."] = "启用后，WIM 选项的入口（小地图菜单、按键绑定、/wim）将打开此面板，而不是经典 WIM 选项窗口。",
+	["While a modern-only skin (such as WIM Modern) is selected, this option is enforced: those skins are configured through this panel only."] = "选择仅现代外观（如 WIM Modern）时，此选项被强制开启：这类外观只能通过此面板配置。",
+
+	-- Modern skin styling --
+	["Modern Skin"] = "现代外观",
+	["These settings style WIM's modern-only skins (such as WIM Modern), which are built from the game's own interface art. They shape the History Viewer and the chat windows, and are available only while a modern-only skin is selected under General > Display Settings; with a classic skin active they are greyed out."] = "这些设置用于美化 WIM 的仅现代外观（如 WIM Modern），它们基于游戏自带的界面素材构建，决定历史记录查看器和聊天窗口的样式。只有在“常规 > 显示设置”下选择了仅现代外观时才可用；使用经典外观时为灰色不可用。",
+	["Disabled while a modern-only skin (such as WIM Modern) is selected: those skins carry settings the classic window has no controls for."] = "选择仅现代外观（如 WIM Modern）时禁用：这类外观包含经典窗口没有对应控件的设置。",
+	["Frame background"] = "边框背景",
+	["Message area background"] = "消息区域背景",
+	["Chat history background"] = "聊天历史背景",
+	["Selection panels background"] = "选择面板背景",
+	["Window frame background"] = "窗口边框背景",
+	["None (game default)"] = "无（游戏默认）",
+	["Panels see through to the game world"] = "面板透出游戏世界",
+	["Window sees through to the game world"] = "窗口透出游戏世界",
+	["Draws the frame background only around the panels, so a clear panel background (None or Transparent) shows the game world behind the viewer instead of the frame fill."] = "仅在面板周围绘制边框背景，这样当面板背景为空（无或透明）时，查看器背后显示的是游戏世界而不是边框填充。",
+	["Draws the window frame background only around the message area, so a clear message area background (None or Transparent) shows the game world behind the window."] = "仅在消息区域周围绘制窗口边框背景，这样当消息区域背景为空（无或透明）时，窗口背后显示的是游戏世界。",
+
+	-- Roleplay profiles (Total RP 3 / Mary Sue Protocol) --
+	["Roleplay Profiles"] = "角色扮演档案",
+	["Enable roleplay profile integration"] = "启用角色扮演档案集成",
+	["Whisper windows show roleplay profile fields from Total RP 3 or any Mary Sue Protocol addon, and gain an Open RP Profile button on their shortcut bar that opens the partner's profile in the installed viewer."] = "密语窗口显示来自 Total RP 3 或任意 Mary Sue Protocol 插件的角色扮演档案字段，并在快捷栏上添加“打开 RP 档案”按钮，用已安装的查看器打开对方的档案。",
+	["Open RP Profile"] = "打开 RP 档案",
+	["Displayed profile fields"] = "显示的档案字段",
+	["Whisper windows show the selected fields from the partner's Total RP 3 or Mary Sue Protocol profile. Fields left unselected -- or without profile data -- keep the standard display."] = "密语窗口显示对方 Total RP 3 或 Mary Sue Protocol 档案中选定的字段。未选择的字段——或没有档案数据的字段——保持标准显示。",
+	["First Name"] = "名字",
+	["Last Name"] = "姓氏",
+	["Title"] = "头衔",
+	["Full Title"] = "完整头衔",
+	["Race"] = "种族",
+	["Class"] = "职业",
+	["Portrait"] = "头像",
+	["Name & Class Color"] = "名称与职业颜色",
+	["The profile's first name, shown as the window's name text."] = "档案中的名字，显示为窗口的名称文本。",
+	["The profile's last name, shown as the window's name text."] = "档案中的姓氏，显示为窗口的名称文本。",
+	["The short title, shown on the window's details line."] = "短头衔，显示在窗口的详细信息行。",
+	["The long title, shown on the window's details line and portrait tooltip."] = "长头衔，显示在窗口的详细信息行和头像提示中。",
+	["The custom race, replacing the character's race on the details line."] = "自定义种族，替换详细信息行中角色的种族。",
+	["The custom class, replacing the character's class on the details line."] = "自定义职业，替换详细信息行中角色的职业。",
+	["The profile's icon, replacing the class icon."] = "档案图标，替换职业图标。",
+	["The profile's custom color, applied to the window's name text and to the class on the details line."] = "档案的自定义颜色，应用于窗口的名称文本和详细信息行中的职业。",
+	["Apply filter to character menus"] = "将过滤器应用到角色菜单",
+
+	-- History Viewer filters --
+	["No Filter"] = "无过滤器",
+	["Relative Dates"] = "相对日期",
+	["%d or more"] = "%d 条或更多",
+	["Fewer than %d"] = "少于 %d 条",
+	["Results Filtered"] = "结果已过滤",
+	["-- Results Filtered --"] = "-- 结果已过滤 --",
+	["Results are hidden by the active filter. Click to open the Filters menu."] = "结果已被当前过滤器隐藏。点击打开过滤器菜单。",
+	["Click to change how history is filtered."] = "点击更改历史记录的过滤方式。",
+	["Click to open the Filters menu."] = "点击打开过滤器菜单。",
+	["Clicking the %s button on the message window will show that user's history in WIM's History Viewer."] = "点击消息窗口上的 %s 按钮，将在 WIM 的历史记录查看器中显示该用户的历史记录。",
+
+	-- Message input & formatting --
+	["Wrap the message being typed"] = "输入中的消息自动换行",
+	["Limit wrapped lines"] = "限制换行行数",
+	["Visible input lines"] = "可见输入行数",
+	["Caps how far the input field grows; past the limit the message scrolls inside it."] = "限制输入框可增长的高度；超过上限后，消息会在框内滚动。",
+	["The most lines the input field grows to before the message scrolls inside it."] = "输入框在消息开始滚动前最多可增长到的行数。",
+	["The input field wraps long messages onto multiple lines, growing downward with the message instead of scrolling it on one line."] = "输入框将长消息折行为多行，随消息向下增高，而不是让消息在一行内滚动。",
+	["Timestamp Format"] = "时间戳格式",
+	["Bracket Style"] = "方括号样式",
+	["Colors"] = "颜色",
+	["Sound"] = "声音",
+
+	-- Chat type options --
+	["Chat Windows"] = "聊天窗口",
+	["Monitor"] = "监视",
+	["Record"] = "记录",
+	["Minimap Alerts"] = "小地图警报",
+
+	-- Help, bug reports & links --
+	["Found a bug?"] = "发现漏洞？",
+	["Report a Bug"] = "报告漏洞",
+	["Reports are welcome! Click below and follow the instructions in the bug report template."] = "欢迎反馈！点击下方并按照漏洞报告模板中的说明操作。",
+	["Visit us on GitHub"] = "访问我们的 GitHub",
+	["Click to copy the link."] = "点击复制链接。",
+	["Press Ctrl+C to copy the link, then open it in your browser."] = "按 Ctrl+C 复制链接，然后在浏览器中打开。",
+
+	-- Debugging & development slash commands --
+	["Clear the captured debug log."] = "清除已捕获的调试日志。",
+	["Set debugging level: /wim debug [0|1|2]. 2 adds verbose chat event tracing."] = "设置调试级别：/wim debug [0|1|2]。2 会添加详细的聊天事件跟踪。",
+	["Snapshot the next modern context menu while it is open."] = "在下一个现代右键菜单打开时为其截图。",
+	["Snapshot UI widget state for skin development: /wim snap all | <Frame.Dot.Path> (bare /wim snap lists the arguments)."] = "捕获界面控件状态用于外观开发：/wim snap all | <Frame.Dot.Path>（直接输入 /wim snap 会列出参数）。",
+
+	-- Tutorials & notices --
+	["WIM is currently running. To access WIM's wide array of options type:"] = "WIM 正在运行。要访问 WIM 的全部选项，请输入：",
+	["WIM's message window has been hidden to WIM's Minimap Icon. If you want to end a conversation, you may do so by <Shift-Clicking> the close button."] = "消息窗口已隐藏到 WIM 的小地图图标。如果要结束对话，可以<Shift+点击>关闭按钮。",
+	["If you want all windows to be this size, you can set the default window size within WIM's options."] = "如果希望所有窗口都采用此尺寸，可以在 WIM 选项中设置默认窗口尺寸。",
+	["You can <Shift-Click> a tab and drag it out into it's own window."] = "你可以<Shift+点击>一个标签并将其拖出，使其成为独立窗口。",
+	["You received a whisper which was hidden due to your current activity. You can change how whispers behave in WIM's options by typing"] = "你收到一条因当前活动而被隐藏的密语。要更改密语的行为方式，请在 WIM 选项中设置，或输入",
+	["Sets the game's Social > Whisper Mode setting to In-line. Without it, suppressed whispers would vanish into a popout chat tab."] = "将游戏的“社交 > 密语模式”设置为“内联”。否则，被抑制的密语会消失在弹出的聊天标签页中。",
+
+	-- Community channel maintenance --
+	["Toggle the experimental community channel re-add repair (mutates chat window channels)."] = "开启实验性的社区频道重新加入修复（会改动聊天窗口的频道）。",
+	["Toggle whether WIM focuses community streams at login."] = "控制 WIM 登录时是否聚焦社区流。",
+
+	-- Misc --
+	["Age"] = "年龄",
+	["Users in %s"] = "%s 的用户",
+
+	-- History Viewer filter modes --
+	["Sent by Me"] = "由我发送",
+	["Sent by Them"] = "由对方发送",
+	["Active Days"] = "活跃天数",
+	["Last 1 Day"] = "最近 1 天",
+	["Last 7 Days"] = "最近 7 天",
+	["Last 30 Days"] = "最近 30 天",
+	["Last 90 Days"] = "最近 90 天",
+
+
+	-- Chrome background names --
+	["None (fully clear)"] = "无（完全透明）",
+	["Transparent"] = "透明",
+	["Rock"] = "岩石",
+	["Marble"] = "大理石",
+	["Dark Marble"] = "暗色大理石",
+	["Bank"] = "银行",
+	["Guild Vault"] = "公会银行",
+	["Dark Sandstone"] = "暗色砂岩",
+	["Parchment (Tileable)"] = "羊皮纸（可平铺）",
+	["Quest Parchment"] = "任务羊皮纸",
+	["Raid Frame"] = "团队框架",
+	["Destiny"] = "命运",
+	["Stationery (Auction)"] = "信纸（拍卖行）",
+	["Stationery (Illustrated)"] = "信纸（插图）",
+	["Stationery (Orgrimmar)"] = "信纸（奥格瑞玛）",
+	["Stationery (Thunder Bluff)"] = "信纸（雷霆崖）",
+	["Stationery (Undercity)"] = "信纸（幽暗城）",
+	["Stationery (Plain)"] = "信纸（素色）",
+	["World Map 1"] = "世界地图 1",
+	["World Map 2"] = "世界地图 2",
+	["Achievement Stats"] = "成就统计",
+	["Adventure Map Parchment"] = "冒险地图羊皮纸",
+	["Collections"] = "藏品",
+	["Frame: Alliance"] = "边框：联盟",
+	["Frame: Horde"] = "边框：部落",
+	["Frame: Neutral"] = "边框：中立",
+	["Frame: Marine"] = "边框：海军",
+	["Frame: Mechagon"] = "边框：麦卡贡",
+	["Frame: Kyrian"] = "边框：格里恩",
+	["Frame: Necrolord"] = "边框：通灵领主",
+	["Frame: Night Fae"] = "边框：法夜",
+	["Frame: Venthyr"] = "边框：温西尔",
+	["Frame: Oribos"] = "边框：奥利波斯",
+	["Frame: Dragonflight"] = "边框：巨龙时代",
+	["Frame: The War Within"] = "边框：地心之战",
+	["Class Hall"] = "职业大厅",
+	["Class Hall (Internal)"] = "职业大厅（内部）",
+	["Garrison Landing Page"] = "要塞登陆页",
+	["Garrison Mission"] = "要塞任务",
+	["Ship Mission Parchment"] = "舰船任务羊皮纸",
+	["Garrison UI"] = "要塞界面",
+	["Garrison UI 2"] = "要塞界面 2",
+	["Credits: Classic"] = "制作人员：经典旧世",
+	["Credits: Burning Crusade"] = "制作人员：燃烧的远征",
+	["Credits: Wrath"] = "制作人员：巫妖王之怒",
+	["Credits: Cataclysm"] = "制作人员：大地的裂变",
+	["Credits: Mists of Pandaria"] = "制作人员：熊猫人之谜",
+	["Credits: Warlords"] = "制作人员：德拉诺之王",
+	["Credits: Legion"] = "制作人员：军团再临",
+	["Credits: Battle for Azeroth"] = "制作人员：争霸艾泽拉斯",
+
+
+	-- Skin & options style notices --
+	["WIM: the selected skin (%s) is configured through the modern options UI; the classic window is unavailable while it is active."] = "WIM：所选外观（%s）通过现代选项界面进行配置；启用期间，经典窗口不可用。",
+	["WIM: the selected skin (%s) requires the modern options UI; switch to another skin first."] = "WIM：所选外观（%s）需要现代选项界面；请先切换到其他外观。",
+	["WIM options style: Modern (native Options > AddOns)."] = "WIM 选项样式：现代（游戏内“选项 > 插件”）。",
+	["WIM options style: Classic (WIM window)."] = "WIM 选项样式：经典（WIM 窗口）。",
 
 });

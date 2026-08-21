@@ -424,13 +424,192 @@ WIM.AddLocale("ruRU", {
 	["Red"] = "Красный",
 	["Yellow"] = "Жёлтый",
 
-	-- Объединение друзей Battle.net (Просмотр истории)
+	-- Battle.net friend consolidation (History Viewer)
 	["Battle.net Friends"] = "Друзья Battle.net",
 	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "Вы действительно хотите удалить ВСЮ историю, сохранённую с %s, на всех реалмах и у всех персонажей этой учётной записи?",
 
-	-- Удаление по дате из списка фильтров просмотра истории
+	-- Per-date deletion from the History Viewer filter list
 	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "Вы действительно хотите удалить историю за %s с %s на всех реалмах и у всех персонажей этой учётной записи?",
 	["Are you sure you want to delete the %s history for %s across every character on %s?"] = "Вы действительно хотите удалить историю за %s для %s у всех персонажей на %s?",
 	["Are you sure you want to delete the %s history for %s on %s?"] = "Вы действительно хотите удалить историю за %s для %s на %s?",
+
+
+	-- Modern options panel --
+	["Use modern options UI"] = "Использовать современный интерфейс настроек",
+	["Classic Options"] = "Классические настройки",
+	["Open"] = "Открыть",
+	["Open the classic WIM options window."] = "Открывает классическое окно настроек WIM.",
+	["Choose the options style: /wim style [classic|modern]."] = "Выберите стиль настроек: /wim style [classic|modern].",
+	["When enabled, WIM's Options entry points (minimap menu, key binding, /wim) open this panel instead of the classic WIM options window."] = "Если включено, точки входа в настройки WIM (меню миникарты, привязка клавиши, /wim) открывают эту панель вместо классического окна настроек WIM.",
+	["While a modern-only skin (such as WIM Modern) is selected, this option is enforced: those skins are configured through this panel only."] = "Пока выбран исключительно современный облик (например, WIM Modern), этот параметр принудительно включён: такие облики настраиваются только через эту панель.",
+
+	-- Modern skin styling --
+	["Modern Skin"] = "Современный облик",
+	["These settings style WIM's modern-only skins (such as WIM Modern), which are built from the game's own interface art. They shape the History Viewer and the chat windows, and are available only while a modern-only skin is selected under General > Display Settings; with a classic skin active they are greyed out."] = "Эти параметры задают оформление исключительно современных обликов WIM (например, WIM Modern), построенных на элементах интерфейса самой игры. Они определяют вид окна просмотра истории и окон чата и доступны только пока выбран исключительно современный облик в разделе «Общие > Настройки отображения»; при активном классическом облике они неактивны.",
+	["Disabled while a modern-only skin (such as WIM Modern) is selected: those skins carry settings the classic window has no controls for."] = "Недоступно, пока выбран исключительно современный облик (например, WIM Modern): такие облики содержат параметры, для которых у классического окна нет элементов управления.",
+	["Frame background"] = "Фон рамки",
+	["Message area background"] = "Фон области сообщений",
+	["Chat history background"] = "Фон истории чата",
+	["Selection panels background"] = "Фон панелей выбора",
+	["Window frame background"] = "Фон рамки окна",
+	["None (game default)"] = "Нет (как в игре)",
+	["Panels see through to the game world"] = "Панели прозрачны для игрового мира",
+	["Window sees through to the game world"] = "Окно прозрачно для игрового мира",
+	["Draws the frame background only around the panels, so a clear panel background (None or Transparent) shows the game world behind the viewer instead of the frame fill."] = "Рисует фон рамки только вокруг панелей, поэтому при прозрачном фоне панелей («Нет» или «Прозрачный») за окном просмотра виден игровой мир вместо заливки рамки.",
+	["Draws the window frame background only around the message area, so a clear message area background (None or Transparent) shows the game world behind the window."] = "Рисует фон рамки окна только вокруг области сообщений, поэтому при прозрачном фоне области сообщений («Нет» или «Прозрачный») за окном виден игровой мир.",
+
+	-- Roleplay profiles (Total RP 3 / Mary Sue Protocol) --
+	["Roleplay Profiles"] = "Ролевые профили",
+	["Enable roleplay profile integration"] = "Включить интеграцию ролевых профилей",
+	["Whisper windows show roleplay profile fields from Total RP 3 or any Mary Sue Protocol addon, and gain an Open RP Profile button on their shortcut bar that opens the partner's profile in the installed viewer."] = "Окна шёпота показывают поля ролевого профиля из Total RP 3 или любого аддона с протоколом Mary Sue, а также получают кнопку «Открыть RP-профиль» на панели ярлыков, которая открывает профиль собеседника в установленном просмотрщике.",
+	["Open RP Profile"] = "Открыть RP-профиль",
+	["Displayed profile fields"] = "Отображаемые поля профиля",
+	["Whisper windows show the selected fields from the partner's Total RP 3 or Mary Sue Protocol profile. Fields left unselected -- or without profile data -- keep the standard display."] = "Окна шёпота показывают выбранные поля из профиля Total RP 3 или Mary Sue собеседника. Невыбранные поля — или поля без данных профиля — сохраняют обычный вид.",
+	["First Name"] = "Имя",
+	["Last Name"] = "Фамилия",
+	["Title"] = "Титул",
+	["Full Title"] = "Полный титул",
+	["Race"] = "Раса",
+	["Class"] = "Класс",
+	["Portrait"] = "Портрет",
+	["Name & Class Color"] = "Цвет имени и класса",
+	["The profile's first name, shown as the window's name text."] = "Имя из профиля, отображаемое как имя окна.",
+	["The profile's last name, shown as the window's name text."] = "Фамилия из профиля, отображаемая как имя окна.",
+	["The short title, shown on the window's details line."] = "Короткий титул, отображаемый в строке деталей окна.",
+	["The long title, shown on the window's details line and portrait tooltip."] = "Полный титул, отображаемый в строке деталей окна и во всплывающей подсказке портрета.",
+	["The custom race, replacing the character's race on the details line."] = "Особая раса, заменяющая расу персонажа в строке деталей.",
+	["The custom class, replacing the character's class on the details line."] = "Особый класс, заменяющий класс персонажа в строке деталей.",
+	["The profile's icon, replacing the class icon."] = "Значок профиля, заменяющий значок класса.",
+	["The profile's custom color, applied to the window's name text and to the class on the details line."] = "Особый цвет профиля, применяемый к имени окна и к классу в строке деталей.",
+	["Apply filter to character menus"] = "Применять фильтр к меню персонажей",
+
+	-- History Viewer filters --
+	["No Filter"] = "Без фильтра",
+	["Relative Dates"] = "Относительные даты",
+	["%d or more"] = "%d и более",
+	["Fewer than %d"] = "Меньше %d",
+	["Results Filtered"] = "Результаты отфильтрованы",
+	["-- Results Filtered --"] = "-- Результаты отфильтрованы --",
+	["Results are hidden by the active filter. Click to open the Filters menu."] = "Результаты скрыты активным фильтром. Нажмите, чтобы открыть меню фильтров.",
+	["Click to change how history is filtered."] = "Нажмите, чтобы изменить фильтрацию истории.",
+	["Click to open the Filters menu."] = "Нажмите, чтобы открыть меню фильтров.",
+	["Clicking the %s button on the message window will show that user's history in WIM's History Viewer."] = "Нажатие кнопки %s в окне сообщения покажет историю этого игрока в окне просмотра истории WIM.",
+
+	-- Message input & formatting --
+	["Wrap the message being typed"] = "Переносить набираемое сообщение",
+	["Limit wrapped lines"] = "Ограничить число строк переноса",
+	["Visible input lines"] = "Видимые строки ввода",
+	["Caps how far the input field grows; past the limit the message scrolls inside it."] = "Ограничивает рост поля ввода; сверх лимита сообщение прокручивается внутри него.",
+	["The most lines the input field grows to before the message scrolls inside it."] = "Максимальное число строк, до которых растёт поле ввода, прежде чем сообщение начнёт прокручиваться внутри.",
+	["The input field wraps long messages onto multiple lines, growing downward with the message instead of scrolling it on one line."] = "Поле ввода переносит длинные сообщения на несколько строк, увеличиваясь вниз вместе с сообщением, вместо прокрутки в одной строке.",
+	["Timestamp Format"] = "Формат времени",
+	["Bracket Style"] = "Стиль скобок",
+	["Colors"] = "Цвета",
+	["Sound"] = "Звук",
+
+	-- Chat type options --
+	["Chat Windows"] = "Окна чата",
+	["Monitor"] = "Отслеживать",
+	["Record"] = "Записывать",
+	["Minimap Alerts"] = "Оповещения на миникарте",
+
+	-- Help, bug reports & links --
+	["Found a bug?"] = "Нашли ошибку?",
+	["Report a Bug"] = "Сообщить об ошибке",
+	["Reports are welcome! Click below and follow the instructions in the bug report template."] = "Сообщения об ошибках приветствуются! Нажмите ниже и следуйте инструкциям в шаблоне отчёта.",
+	["Visit us on GitHub"] = "Заходите к нам на GitHub",
+	["Click to copy the link."] = "Нажмите, чтобы скопировать ссылку.",
+	["Press Ctrl+C to copy the link, then open it in your browser."] = "Нажмите Ctrl+C, чтобы скопировать ссылку, и откройте её в браузере.",
+
+	-- Debugging & development slash commands --
+	["Clear the captured debug log."] = "Очистить захваченный журнал отладки.",
+	["Set debugging level: /wim debug [0|1|2]. 2 adds verbose chat event tracing."] = "Задаёт уровень отладки: /wim debug [0|1|2]. 2 включает подробную трассировку событий чата.",
+	["Snapshot the next modern context menu while it is open."] = "Делает снимок следующего современного контекстного меню, пока оно открыто.",
+	["Snapshot UI widget state for skin development: /wim snap all | <Frame.Dot.Path> (bare /wim snap lists the arguments)."] = "Сохраняет состояние UI-виджетов для разработки обликов: /wim snap all | <Frame.Dot.Path> (без аргументов /wim snap выводит список вариантов).",
+
+	-- Tutorials & notices --
+	["WIM is currently running. To access WIM's wide array of options type:"] = "WIM сейчас запущен. Чтобы получить доступ ко всем настройкам WIM, введите:",
+	["WIM's message window has been hidden to WIM's Minimap Icon. If you want to end a conversation, you may do so by <Shift-Clicking> the close button."] = "Окно сообщения скрыто в значок на миникарте WIM. Чтобы завершить беседу, <Shift-щёлкните> кнопку закрытия.",
+	["If you want all windows to be this size, you can set the default window size within WIM's options."] = "Если хотите, чтобы все окна были такого размера, задайте размер окна по умолчанию в настройках WIM.",
+	["You can <Shift-Click> a tab and drag it out into it's own window."] = "<Shift-щелчок> по вкладке позволяет перетащить её в отдельное окно.",
+	["You received a whisper which was hidden due to your current activity. You can change how whispers behave in WIM's options by typing"] = "Вы получили шёпот, скрытый из-за вашей текущей активности. Изменить поведение шёпота можно в настройках WIM, введя",
+	["Sets the game's Social > Whisper Mode setting to In-line. Without it, suppressed whispers would vanish into a popout chat tab."] = "Устанавливает игровой параметр «Социальное > Режим шёпота» в значение «Встроенный». Иначе подавленные шёпоты исчезнут в отдельной вкладке чата.",
+
+	-- Community channel maintenance --
+	["Toggle the experimental community channel re-add repair (mutates chat window channels)."] = "Включает экспериментальное исправление повторного присоединения каналов сообщества (изменяет каналы окон чата).",
+	["Toggle whether WIM focuses community streams at login."] = "Определяет, фокусирует ли WIM потоки сообщества при входе.",
+
+	-- Misc --
+	["Age"] = "Возраст",
+	["Users in %s"] = "Игроки в %s",
+
+	-- History Viewer filter modes --
+	["Sent by Me"] = "Отправлено мной",
+	["Sent by Them"] = "Отправлено ими",
+	["Active Days"] = "Активные дни",
+	["Last 1 Day"] = "Последний день",
+	["Last 7 Days"] = "Последние 7 дней",
+	["Last 30 Days"] = "Последние 30 дней",
+	["Last 90 Days"] = "Последние 90 дней",
+
+
+	-- Chrome background names --
+	["None (fully clear)"] = "Нет (полностью прозрачный)",
+	["Transparent"] = "Прозрачный",
+	["Rock"] = "Скала",
+	["Marble"] = "Мрамор",
+	["Dark Marble"] = "Тёмный мрамор",
+	["Bank"] = "Банк",
+	["Guild Vault"] = "Банк гильдии",
+	["Dark Sandstone"] = "Тёмный песчаник",
+	["Parchment (Tileable)"] = "Пергамент (плитка)",
+	["Quest Parchment"] = "Пергамент задания",
+	["Raid Frame"] = "Рамка рейда",
+	["Destiny"] = "Судьба",
+	["Stationery (Auction)"] = "Почтовая бумага (аукцион)",
+	["Stationery (Illustrated)"] = "Почтовая бумага (с рисунком)",
+	["Stationery (Orgrimmar)"] = "Почтовая бумага (Оргриммар)",
+	["Stationery (Thunder Bluff)"] = "Почтовая бумага (Громовой утёс)",
+	["Stationery (Undercity)"] = "Почтовая бумага (Подгород)",
+	["Stationery (Plain)"] = "Почтовая бумага (простая)",
+	["World Map 1"] = "Карта мира 1",
+	["World Map 2"] = "Карта мира 2",
+	["Achievement Stats"] = "Статистика достижений",
+	["Adventure Map Parchment"] = "Пергамент карты приключений",
+	["Collections"] = "Коллекции",
+	["Frame: Alliance"] = "Рамка: Альянс",
+	["Frame: Horde"] = "Рамка: Орда",
+	["Frame: Neutral"] = "Рамка: Нейтральный",
+	["Frame: Marine"] = "Рамка: Морская",
+	["Frame: Mechagon"] = "Рамка: Мехагон",
+	["Frame: Kyrian"] = "Рамка: Кирии",
+	["Frame: Necrolord"] = "Рамка: Некролорды",
+	["Frame: Night Fae"] = "Рамка: Ночная Фея",
+	["Frame: Venthyr"] = "Рамка: Вентир",
+	["Frame: Oribos"] = "Рамка: Орибос",
+	["Frame: Dragonflight"] = "Рамка: Dragonflight",
+	["Frame: The War Within"] = "Рамка: The War Within",
+	["Class Hall"] = "Оплот класса",
+	["Class Hall (Internal)"] = "Оплот класса (внутренний)",
+	["Garrison Landing Page"] = "Страница высадки гарнизона",
+	["Garrison Mission"] = "Задание гарнизона",
+	["Ship Mission Parchment"] = "Пергамент морских заданий",
+	["Garrison UI"] = "Интерфейс гарнизона",
+	["Garrison UI 2"] = "Интерфейс гарнизона 2",
+	["Credits: Classic"] = "Титры: Classic",
+	["Credits: Burning Crusade"] = "Титры: Burning Crusade",
+	["Credits: Wrath"] = "Титры: Wrath",
+	["Credits: Cataclysm"] = "Титры: Cataclysm",
+	["Credits: Mists of Pandaria"] = "Титры: Mists of Pandaria",
+	["Credits: Warlords"] = "Титры: Warlords",
+	["Credits: Legion"] = "Титры: Legion",
+	["Credits: Battle for Azeroth"] = "Титры: Battle for Azeroth",
+
+
+	-- Skin & options style notices --
+	["WIM: the selected skin (%s) is configured through the modern options UI; the classic window is unavailable while it is active."] = "WIM: выбранный облик (%s) настраивается через современный интерфейс настроек; классическое окно недоступно, пока он активен.",
+	["WIM: the selected skin (%s) requires the modern options UI; switch to another skin first."] = "WIM: выбранный облик (%s) требует современный интерфейс настроек; сначала переключитесь на другой облик.",
+	["WIM options style: Modern (native Options > AddOns)."] = "Стиль настроек WIM: современный (в настройках игры, раздел «Аддоны»).",
+	["WIM options style: Classic (WIM window)."] = "Стиль настроек WIM: классический (окно WIM).",
 
 });
