@@ -397,6 +397,7 @@ WIM.AddLocale("frFR", {
     ["World Chat"] = "Discussion du monde",
     ["Custom Chat"] = "Discussion personnalisée",
     ["Community Chat"] = "Discussion de communauté",
+    ["Community Chats"] = "Discussions de communauté",
     ["Chat"] = "Discussion",
     ["Play special sound for %s."] = "Jouer le son spécial pour %s",
     ["Play sound when a message is received."] = "Jouer un son quand un message est reçu",
@@ -421,4 +422,14 @@ WIM.AddLocale("frFR", {
 	["Green"] = "Vert",
 	["Red"] = "Rouge",
 	["Yellow"] = "Jaune",
+
+	-- Consolidation des amis Battle.net (Visionneuse d'historique)
+	["Battle.net Friends"] = "Amis Battle.net",
+	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "Êtes-vous sûr de vouloir supprimer tout l'historique enregistré avec %s, sur tous les royaumes et tous les personnages de ce compte ?",
+
+	-- Suppression par date depuis la liste des filtres de la visionneuse d'historique
+	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "Êtes-vous sûr de vouloir supprimer l'historique du %s avec %s sur tous les royaumes et personnages de ce compte ?",
+	["Are you sure you want to delete the %s history for %s across every character on %s?"] = "Êtes-vous sûr de vouloir supprimer l'historique du %s de %s sur tous les personnages de %s ?",
+	["Are you sure you want to delete the %s history for %s on %s?"] = "Êtes-vous sûr de vouloir supprimer l'historique du %s de %s sur %s ?",
+
 });

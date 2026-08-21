@@ -398,6 +398,7 @@ WIM.AddLocale("ruRU", {
     ["World Chat"] = "Мировой чат",
     ["Custom Chat"] = "Свой чат",
     ["Community Chat"] = "Чат сообщества",
+    ["Community Chats"] = "Чаты сообщества",
     ["Chat"] = "Чат",
     ["Play special sound for %s."] = "Проиграть особый звук для %s.",
     ["Play sound when a message is received."] = "Проиграть звук при получении сообщения.",
@@ -422,4 +423,14 @@ WIM.AddLocale("ruRU", {
 	["Green"] = "Зелёный",
 	["Red"] = "Красный",
 	["Yellow"] = "Жёлтый",
+
+	-- Объединение друзей Battle.net (Просмотр истории)
+	["Battle.net Friends"] = "Друзья Battle.net",
+	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "Вы действительно хотите удалить ВСЮ историю, сохранённую с %s, на всех реалмах и у всех персонажей этой учётной записи?",
+
+	-- Удаление по дате из списка фильтров просмотра истории
+	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "Вы действительно хотите удалить историю за %s с %s на всех реалмах и у всех персонажей этой учётной записи?",
+	["Are you sure you want to delete the %s history for %s across every character on %s?"] = "Вы действительно хотите удалить историю за %s для %s у всех персонажей на %s?",
+	["Are you sure you want to delete the %s history for %s on %s?"] = "Вы действительно хотите удалить историю за %s для %s на %s?",
+
 });

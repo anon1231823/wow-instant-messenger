@@ -396,6 +396,7 @@ WIM.AddLocale("koKR", {
     ["World Chat"] = "월드 채팅",
     ["Custom Chat"] = "사용자 채팅",
     ["Community Chat"] = "커뮤니티 채팅",
+    ["Community Chats"] = "커뮤니티 채팅",
     ["Chat"] = "채팅",
     ["Play special sound for %s."] = "%s에 대해 소리 재생",
     ["Play sound when a message is received."] = "메시지 수신 시 효과음 재생",
@@ -420,4 +421,14 @@ WIM.AddLocale("koKR", {
     ["Green"] = "초록색",
     ["Red"] = "빨간색",
     ["Yellow"] = "노란색",
+
+    -- 배틀닷넷 친구 통합 (기록 뷰어)
+    ["Battle.net Friends"] = "배틀닷넷 친구",
+    ["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "모든 서버 및 이 계정의 모든 캐릭터에 걸쳐 %s와(과) 저장된 모든 기록을 삭제하시겠습니까?",
+
+    -- 기록 뷰어 필터 목록에서 날짜별 삭제
+    ["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "%s 날짜의 %s와(과)의 기록을 모든 서버 및 이 계정의 모든 캐릭터에서 삭제하시겠습니까?",
+    ["Are you sure you want to delete the %s history for %s across every character on %s?"] = "%s 날짜의 %s에 대한 기록을 %s의 모든 캐릭터에서 삭제하시겠습니까?",
+    ["Are you sure you want to delete the %s history for %s on %s?"] = "%s 날짜의 %s에 대한 %s에서의 기록을 삭제하시겠습니까?",
+
 });

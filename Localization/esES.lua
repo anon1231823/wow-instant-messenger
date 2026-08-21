@@ -124,7 +124,7 @@ local translations = {
     ["WIM pruned %d |4message:messages; from your history."] = "WIM eliminó %d |4mensaje:mensajes; de tu historial.",
     ["History Viewer"] = "Visor de historial",
     ["Filters"] = "Filtros",
-    ["Are you sure you want to delete all history saved for %s on %s?"] = "¿Está seguro de que desea eliminar todo el historial guardado para %s en %s?",
+    ["Are you sure you want to delete all history saved for %s on %s?"] = "¿Estás seguro de que quieres eliminar todo el historial guardado para %s en %s?",
     ["Search resulted in %d |4message:messages;."] = "La búsqueda resultó en %d |4mensaje:mensajes;.",
     ["No results found!"] = "¡No se han encontrado resultados!",
     ["Search"] = "Buscar",
@@ -176,7 +176,7 @@ local translations = {
     ["You are about to clear all of WIM's history!"] = "¡Estás a punto de borrar toda la historia de WIM!",
     ["This action will reload your user interface."] = "Esta acción volverá a cargar tu interfaz de usuario.",
     ["Do you want to continue?"] = "¿Quieres continuar?",
-    ["You are about to restore WIM's filters to it's default settings!"] = "¡Está a punto de restaurar los filtros de WIM a su configuración predeterminada!",
+    ["You are about to restore WIM's filters to it's default settings!"] = "¡Estás a punto de restaurar los filtros de WIM a su configuración predeterminada!",
     ["Usage"] = "Uso",
     ["Clear various WIM data."] = "Borrar varios datos WIM.",
 
@@ -371,7 +371,7 @@ local translations = {
     --Expose.lua
     ["Your conversations have been hidden in order to clear your screen while in combat. To disable this feature type"] = "Tus conversaciones se han ocultado para limpiar tu pantalla mientras estás en combate. Para desactivar esto escribe",
     ["Expose"] = "Expose",
-    ["Expose is a Mac OS X inspired feature which enables you to quickly clear your screen of windows and then restore them back to their original position."] = "Expose es una característica inspirada en Mac OS X que le permite borrar rápidamente la pantalla de ventanas y luego restaurarlas a su posición original.",
+    ["Expose is a Mac OS X inspired feature which enables you to quickly clear your screen of windows and then restore them back to their original position."] = "Expose es una característica inspirada en Mac OS X que te permite borrar rápidamente la pantalla de ventanas y luego restaurarlas a su posición original.",
     ["Auto hide/restore windows during combat."] = "Ocultar/restaurar ventanas automáticamente durante el combate",
     ["Delay if I am typing a message."] = "Retrasar si estoy escribiendo un mensaje",
     ["Border Size"] = "Tamaño del borde",
@@ -396,6 +396,7 @@ local translations = {
     ["World Chat"] = "Chat del mundo",
     ["Custom Chat"] = "Chat personalizado",
     ["Community Chat"] = "Chat de comunidad",
+    ["Community Chats"] = "Chats de comunidad",
     ["Chat"] = "Chat",
     ["Play special sound for %s."] = "Reproducir sonido especial para %s",
     ["Play sound when a message is received."] = "Reproducir sonido cuando se recibe un mensaje",
@@ -420,6 +421,16 @@ local translations = {
 	["Green"] = "Verde",
 	["Red"] = "Rojo",
 	["Yellow"] = "Amarillo",
+
+	-- Consolidación de amigos de Battle.net (Visor de historial)
+	["Battle.net Friends"] = "Amigos de Battle.net",
+	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "¿Estás seguro de que quieres eliminar TODO el historial guardado con %s, en todos los reinos y todos los personajes de esta cuenta?",
+
+	-- Eliminación por fecha desde la lista de filtros del Visor de historial
+	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "¿Estás seguro de que quieres eliminar el historial del %s con %s en todos los reinos y personajes de esta cuenta?",
+	["Are you sure you want to delete the %s history for %s across every character on %s?"] = "¿Estás seguro de que quieres eliminar el historial del %s de %s en todos los personajes de %s?",
+	["Are you sure you want to delete the %s history for %s on %s?"] = "¿Estás seguro de que quieres eliminar el historial del %s de %s en %s?",
+
 };
 
 if WIM.getLocale() == "esES" then

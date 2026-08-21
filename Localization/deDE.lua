@@ -397,6 +397,7 @@ WIM.AddLocale("deDE", {
     ["World Chat"] = "Weltchat",
     ["Custom Chat"] = "Benutzerdefinierter Chat",
     ["Community Chat"] = "Community-Chat",
+    ["Community Chats"] = "Community-Chats",
     ["Chat"] = "Chat",
     ["Play special sound for %s."] = "Speziellen Sound für %s abspielen.",
     ["Play sound when a message is received."] = "Sound bei eingehender Nachricht abspielen.",
@@ -421,4 +422,14 @@ WIM.AddLocale("deDE", {
     ["Green"] = "Grün",
     ["Red"] = "Rot",
     ["Yellow"] = "Gelb",
+
+    -- Battle.net-Freund Zusammenführung (Verlaufsanzeige)
+    ["Battle.net Friends"] = "Battle.net-Freunde",
+    ["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "Bist du sicher, dass du ALLE mit %s gespeicherten Nachrichtenverläufe über alle Realms und Charaktere dieses Accounts löschen möchtest?",
+
+    -- Löschen nach Datum aus der Filterliste der Verlaufsanzeige
+    ["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "Bist du sicher, dass du die Nachrichtenverläufe vom %s mit %s über alle Realms und Charaktere dieses Accounts löschen möchtest?",
+    ["Are you sure you want to delete the %s history for %s across every character on %s?"] = "Bist du sicher, dass du die Nachrichtenverläufe vom %s für %s über alle Charaktere auf %s löschen möchtest?",
+    ["Are you sure you want to delete the %s history for %s on %s?"] = "Bist du sicher, dass du die Nachrichtenverläufe vom %s für %s auf %s löschen möchtest?",
+
 });

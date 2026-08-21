@@ -397,6 +397,7 @@ WIM.AddLocale("zhTW", {
     ["World Chat"] = "一般頻道",
     ["Custom Chat"] = "自定頻道",
     ["Community Chat"] = "社群聊天",
+    ["Community Chats"] = "社群聊天",
     ["Chat"] = "聊天",
     ["Play special sound for %s."] = "對 %s 撥放特別的音效",
     ["Include emotes."] = "包含表情。",
@@ -422,4 +423,14 @@ WIM.AddLocale("zhTW", {
     ["Green"] = "綠色",
     ["Red"] = "紅色",
     ["Yellow"] = "黃色",
+
+    -- 戰網好友合併（記錄檢視器）
+    ["Battle.net Friends"] = "戰網好友",
+    ["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "您確定要刪除與 %s 在此帳號所有伺服器與所有角色儲存的所有記錄嗎？",
+
+    -- 從記錄檢視器的過濾清單中按日期刪除
+    ["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "您確定要刪除 %s 當天與 %s 在此帳號所有伺服器與角色儲存的記錄嗎？",
+    ["Are you sure you want to delete the %s history for %s across every character on %s?"] = "您確定要刪除 %s 當天 %s 在 %s 所有角色儲存的記錄嗎？",
+    ["Are you sure you want to delete the %s history for %s on %s?"] = "您確定要刪除 %s 當天 %s 在 %s 儲存的記錄嗎？",
+
 });

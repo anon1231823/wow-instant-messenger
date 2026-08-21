@@ -394,6 +394,7 @@ WIM.AddLocale("ptBR", {
     ["World Chat"] = "Bate-papo mundial",
     ["Custom Chat"] = "Bate-papo personalizado",
     ["Community Chat"] = "Bate-papo da comunidade",
+    ["Community Chats"] = "Bate-papos da comunidade",
     ["Chat"] = "Bate-papo",
     ["Play special sound for %s."] = "Reproduzir som especial para %s",
     ["Play sound when a message is received."] = "Reproduzir som quando uma mensagem é recebida.",
@@ -418,4 +419,14 @@ WIM.AddLocale("ptBR", {
 	["Green"] = "Verde",
 	["Red"] = "Vermelho",
 	["Yellow"] = "Amarelo",
+
+	-- Consolidação de amigos da Battle.net (Visualizador de histórico)
+	["Battle.net Friends"] = "Amigos da Battle.net",
+	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "Você tem certeza que você quer deletar TODO o histórico salvo com %s, em todos os reinos e todos os personagens desta conta?",
+
+	-- Exclusão por data a partir da lista de filtros do Visualizador de histórico
+	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "Você tem certeza que você quer deletar o histórico de %s com %s em todos os reinos e personagens desta conta?",
+	["Are you sure you want to delete the %s history for %s across every character on %s?"] = "Você tem certeza que você quer deletar o histórico de %s de %s em todos os personagens de %s?",
+	["Are you sure you want to delete the %s history for %s on %s?"] = "Você tem certeza que você quer deletar o histórico de %s de %s em %s?",
+
 });

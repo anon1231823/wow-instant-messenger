@@ -395,6 +395,7 @@ WIM.AddLocale("itIT", {
     ["World Chat"] = "Chat mondiale",
     ["Custom Chat"] = "Chat personalizzata",
     ["Community Chat"] = "Chat della comunità",
+    ["Community Chats"] = "Chat della comunità",
     ["Chat"] = "Chat",
     ["Play special sound for %s."] = "Riproduci un suono speciale per %s.",
     ["Play sound when a message is received."] = "Riproduci un suono quando viene ricevuto un messaggio.",
@@ -419,4 +420,14 @@ WIM.AddLocale("itIT", {
 	["Green"] = "Verde",
 	["Red"] = "Rosso",
 	["Yellow"] = "Giallo",
+
+	-- Consolidamento amici Battle.net (Visualizzatore cronologia)
+	["Battle.net Friends"] = "Amici Battle.net",
+	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "Vuoi davvero eliminare TUTTA la cronologia salvata con %s, su tutti i reami e tutti i personaggi di questo account?",
+
+	-- Eliminazione per data dalla lista dei filtri del Visualizzatore cronologia
+	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "Vuoi davvero eliminare la cronologia del %s con %s su tutti i reami e personaggi di questo account?",
+	["Are you sure you want to delete the %s history for %s across every character on %s?"] = "Vuoi davvero eliminare la cronologia del %s di %s su tutti i personaggi di %s?",
+	["Are you sure you want to delete the %s history for %s on %s?"] = "Vuoi davvero eliminare la cronologia del %s di %s su %s?",
+
 });

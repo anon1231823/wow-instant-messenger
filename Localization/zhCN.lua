@@ -397,6 +397,7 @@ WIM.AddLocale("zhCN", {
     ["World Chat"] = "世界聊天",
     ["Custom Chat"] = "自定义聊天",
     ["Community Chat"] = "社区聊天",
+    ["Community Chats"] = "社区聊天",
     ["Chat"] = "聊天",
     ["Play special sound for %s."] = "为%s播放特殊音效。",
     ["Play sound when a message is received."] = "收到信息时播放音效。",
@@ -421,4 +422,14 @@ WIM.AddLocale("zhCN", {
 	["Green"] = "绿色",
 	["Red"] = "红色",
 	["Yellow"] = "黄色",
+
+	-- 战网好友合并（历史记录查看器）
+	["Battle.net Friends"] = "战网好友",
+	["Are you sure you want to delete ALL history saved with %s, across every realm and every character on this account?"] = "你确定要删除与 %s 在本账号所有服务器、所有角色上的全部历史记录吗？",
+
+	-- 从历史记录查看器的过滤列表中按日期删除
+	["Are you sure you want to delete the %s history with %s across every realm and character on this account?"] = "你确定要删除 %s 当天与 %s 在本账号所有服务器和角色上的历史记录吗？",
+	["Are you sure you want to delete the %s history for %s across every character on %s?"] = "你确定要删除 %s 当天 %s 在 %s 所有角色上的历史记录吗？",
+	["Are you sure you want to delete the %s history for %s on %s?"] = "你确定要删除 %s 当天 %s 在 %s 的历史记录吗？",
+
 });
