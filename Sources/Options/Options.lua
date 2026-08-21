@@ -322,10 +322,8 @@ function ShowClassicOptions()
     -- controls for, so while one is selected the classic window stays
     -- closed (the same lock that pins the options style to modern).
     if(SkinLocksOptionsStyle and SkinLocksOptionsStyle()) then
-        _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: the selected skin ("
-            ..(db and db.skin and db.skin.selected or "")..") is configured"
-            .." through the modern options UI; the classic window is"
-            .." unavailable while it is active.");
+        _G.DEFAULT_CHAT_FRAME:AddMessage(L["WIM: the selected skin (%s) is configured through the modern options UI; the classic window is unavailable while it is active."]
+            :format(db and db.skin and db.skin.selected or ""));
         if(ShowModernOptions) then
             ShowModernOptions();
         end

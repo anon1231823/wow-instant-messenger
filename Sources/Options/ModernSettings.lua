@@ -462,9 +462,13 @@ local function bugReportRowInit(row)
                 hasEditBox = 1,
                 editBoxWidth = 330,
                 OnShow = function(self)
-                    self.editBox:SetText(BUG_REPORT_URL);
-                    self.editBox:HighlightText();
-                    self.editBox:SetFocus();
+                    local name = self:GetName();
+                    local editBox = self.editBox or (name and _G[name.."EditBox"]);
+                    if (editBox) then
+                        editBox:SetText(BUG_REPORT_URL);
+                        editBox:HighlightText();
+                        editBox:SetFocus();
+                    end
                 end,
                 EditBoxOnTextChanged = function(self)
                     if (self:GetText() ~= BUG_REPORT_URL) then
@@ -621,9 +625,8 @@ end);
 function SetOptionsStyle(enabled)
     enabled = enabled and true or false;
     if (not enabled and SkinLocksOptionsStyle()) then
-        _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: the selected skin ("
-            ..(db.skin and db.skin.selected or "")..") requires the modern"
-            .." options UI; switch to another skin first.");
+        _G.DEFAULT_CHAT_FRAME:AddMessage(L["WIM: the selected skin (%s) requires the modern options UI; switch to another skin first."]
+            :format(db.skin and db.skin.selected or ""));
         return;
     end
     if (styleSetting) then
@@ -635,8 +638,9 @@ function SetOptionsStyle(enabled)
     -- has no refresh API, so an open dropdown would keep showing the old
     -- state. Close any open menu instead of leaving a stale checkmark.
     libs.DropDownMenu.CloseDropDownMenus();
-    _G.DEFAULT_CHAT_FRAME:AddMessage("WIM options style: "
-        ..(enabled and "Modern (native Options > AddOns)" or "Classic (WIM window)")..".");
+    _G.DEFAULT_CHAT_FRAME:AddMessage(enabled
+        and L["WIM options style: Modern (native Options > AddOns)."]
+        or L["WIM options style: Classic (WIM window)."]);
 end
 
 RegisterSlashCommand("style", function(args)
