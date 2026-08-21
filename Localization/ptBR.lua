@@ -608,4 +608,15 @@ WIM.AddLocale("ptBR", {
 	["WIM options style: Modern (native Options > AddOns)."] = "Estilo de opções do WIM: moderno (nativo, em Opções > AddOns).",
 	["WIM options style: Classic (WIM window)."] = "Estilo de opções do WIM: clássico (janela do WIM).",
 
+
+    -- Slash command feedback --
+    ["WIM: community chat settings unavailable."] = "WIM: configurações de bate-papo de comunidade indisponíveis.",
+    ["WIM community stream auto-focus ON. Takes effect at next login."] = "Foco automático de canais de comunidade do WIM LIGADO. Entra em vigor no próximo login.",
+    ["WIM community stream auto-focus OFF - the client may refuse sends to community channels. Takes effect at next login."] = "Foco automático de canais de comunidade do WIM DESLIGADO - o cliente pode recusar envios para canais de comunidade. Entra em vigor no próximo login.",
+    ["WIM channel re-add repair ON (experimental). On logins where the community stream is focused late, WIM removes and re-adds community channels to ChatFrame1 about 8s after login. If a re-add fails the channel must be restored from the chat settings UI."] = "Reparo de canais do WIM LIGADO (experimental). Em logins em que o canal de comunidade recebe foco tarde, o WIM remove e readiciona os canais de comunidade ao ChatFrame1 cerca de 8 segundos após o login. Se uma readição falhar, o canal deve ser restaurado nas configurações do bate-papo.",
+    ["WIM: attempting a repair now (see /wim debug output)."] = "WIM: tentando um reparo agora (veja a saída de /wim debug).",
+    ["WIM channel re-add repair OFF. No further attempts this session."] = "Reparo de canais do WIM DESLIGADO. Sem novas tentativas nesta sessão.",
+    ["Usage: /wim style [classic|modern]"] = "Uso: /wim style [classic|modern]",
+    ["WIM: the modern options UI is not available on this client."] = "WIM: a interface moderna de opções não está disponível neste cliente.",
+    ["WIM: queued options open canceled."] = "WIM: abertura de opções na fila cancelada.",
 });

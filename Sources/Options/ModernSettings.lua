@@ -653,11 +653,11 @@ RegisterSlashCommand("style", function(args)
         elseif (args == "") then
             target = not db.modernOptions;
         else
-            _G.DEFAULT_CHAT_FRAME:AddMessage("Usage: /wim style [classic|modern]");
+            _G.DEFAULT_CHAT_FRAME:AddMessage(L["Usage: /wim style [classic|modern]"]);
             return;
         end
         if (target and not options.modernCategoryID) then
-            _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: the modern options UI is not available on this client.");
+            _G.DEFAULT_CHAT_FRAME:AddMessage(L["WIM: the modern options UI is not available on this client."]);
             return;
         end
         SetOptionsStyle(target);

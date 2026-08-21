@@ -610,4 +610,15 @@ WIM.AddLocale("koKR", {
     ["WIM options style: Modern (native Options > AddOns)."] = "WIM 옵션 스타일: 현대식 (게임 내 옵션 > 애드온).",
     ["WIM options style: Classic (WIM window)."] = "WIM 옵션 스타일: 클래식 (WIM 창).",
 
+
+    -- Slash command feedback --
+    ["WIM: community chat settings unavailable."] = "WIM: 커뮤니티 대화 설정을 사용할 수 없습니다.",
+    ["WIM community stream auto-focus ON. Takes effect at next login."] = "WIM 커뮤니티 채널 자동 초점 켜짐. 다음 로그인부터 적용됩니다.",
+    ["WIM community stream auto-focus OFF - the client may refuse sends to community channels. Takes effect at next login."] = "WIM 커뮤니티 채널 자동 초점 꺼짐 - 클라이언트가 커뮤니티 채널로의 전송을 거부할 수 있습니다. 다음 로그인부터 적용됩니다.",
+    ["WIM channel re-add repair ON (experimental). On logins where the community stream is focused late, WIM removes and re-adds community channels to ChatFrame1 about 8s after login. If a re-add fails the channel must be restored from the chat settings UI."] = "WIM 채널 재추가 복구 켜짐 (실험적). 커뮤니티 채널 초점이 늦게 잡히는 로그인에서는 WIM이 로그인 약 8초 후 ChatFrame1에서 커뮤니티 채널을 제거하고 다시 추가합니다. 재추가에 실패하면 대화 설정에서 채널을 복원해야 합니다.",
+    ["WIM: attempting a repair now (see /wim debug output)."] = "WIM: 지금 복구를 시도합니다 (/wim debug 출력 참조).",
+    ["WIM channel re-add repair OFF. No further attempts this session."] = "WIM 채널 재추가 복구 꺼짐. 이번 세션에서는 더 이상 시도하지 않습니다.",
+    ["Usage: /wim style [classic|modern]"] = "사용법: /wim style [classic|modern]",
+    ["WIM: the modern options UI is not available on this client."] = "WIM: 이 클라이언트에서는 현대식 옵션 UI를 사용할 수 없습니다.",
+    ["WIM: queued options open canceled."] = "WIM: 대기 중인 옵션 열기가 취소되었습니다.",
 });

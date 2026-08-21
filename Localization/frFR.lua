@@ -355,7 +355,7 @@ WIM.AddLocale("frFR", {
 
     -- Filters.lua --
     ["Show Alert"] = "Afficher une alerte",
-    ["WIM has blocked a message from %s."] = "Afficher une alerte",
+    ["WIM has blocked a message from %s."] = "WIM a bloqué un message de %s.",
     ["View Blocked Message"] = "Voir message bloqué",
     ["Blocked Message"] = "Message bloqué",
 
@@ -611,4 +611,15 @@ WIM.AddLocale("frFR", {
 	["WIM options style: Modern (native Options > AddOns)."] = "Style d'options de WIM : moderne (natif, dans Options > AddOns).",
 	["WIM options style: Classic (WIM window)."] = "Style d'options de WIM : classique (fenêtre WIM).",
 
+
+    -- Slash command feedback --
+    ["WIM: community chat settings unavailable."] = "WIM : paramètres de discussion de communauté indisponibles.",
+    ["WIM community stream auto-focus ON. Takes effect at next login."] = "Focalisation automatique des canaux de communauté de WIM ACTIVÉE. Prend effet à la prochaine connexion.",
+    ["WIM community stream auto-focus OFF - the client may refuse sends to community channels. Takes effect at next login."] = "Focalisation automatique des canaux de communauté de WIM DÉSACTIVÉE - le client peut refuser les envois vers les canaux de communauté. Prend effet à la prochaine connexion.",
+    ["WIM channel re-add repair ON (experimental). On logins where the community stream is focused late, WIM removes and re-adds community channels to ChatFrame1 about 8s after login. If a re-add fails the channel must be restored from the chat settings UI."] = "Réparation des canaux de WIM ACTIVÉE (expérimental). Lors des connexions où le canal de communauté est focalisé tardivement, WIM retire puis rajoute les canaux de communauté à ChatFrame1 environ 8 secondes après la connexion. Si un rajout échoue, le canal doit être restauré depuis les paramètres de discussion.",
+    ["WIM: attempting a repair now (see /wim debug output)."] = "WIM : tentative de réparation en cours (voir la sortie de /wim debug).",
+    ["WIM channel re-add repair OFF. No further attempts this session."] = "Réparation des canaux de WIM DÉSACTIVÉE. Plus aucune tentative durant cette session.",
+    ["Usage: /wim style [classic|modern]"] = "Utilisation : /wim style [classic|modern]",
+    ["WIM: the modern options UI is not available on this client."] = "WIM : l'interface d'options moderne n'est pas disponible sur ce client.",
+    ["WIM: queued options open canceled."] = "WIM : ouverture des options en attente annulée.",
 });

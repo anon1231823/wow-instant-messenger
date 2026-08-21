@@ -332,7 +332,7 @@ local translations = {
 	["Medium"] = "Medio",
 	["High"] = "Alto",
 	["Dialog"] = ENABLE_DIALOG,
-	["Tooltip"] = true,
+	["Tooltip"] = "Descripción emergente",
     ["Unlock from Minimap"] = "Desbloquear del minimapa",
     ["Press <Tab> to advance to next tell target."] = "Presionar <Tab> para avanzar al siguiente objetivo",
     ["Force sounds when game sound is disabled."] = "Forzar sonidos cuando el sonido del juego está desactivado",
@@ -610,6 +610,17 @@ local translations = {
 	["WIM options style: Modern (native Options > AddOns)."] = "Estilo de opciones de WIM: moderno (nativo, en Opciones > AddOns).",
 	["WIM options style: Classic (WIM window)."] = "Estilo de opciones de WIM: clásico (ventana de WIM).",
 
+
+    -- Slash command feedback --
+    ["WIM: community chat settings unavailable."] = "WIM: configuración de chat de comunidad no disponible.",
+    ["WIM community stream auto-focus ON. Takes effect at next login."] = "Autoenfoque de canales de comunidad de WIM ACTIVADO. Surte efecto en el próximo inicio de sesión.",
+    ["WIM community stream auto-focus OFF - the client may refuse sends to community channels. Takes effect at next login."] = "Autoenfoque de canales de comunidad de WIM DESACTIVADO - el cliente puede rechazar envíos a canales de comunidad. Surte efecto en el próximo inicio de sesión.",
+    ["WIM channel re-add repair ON (experimental). On logins where the community stream is focused late, WIM removes and re-adds community channels to ChatFrame1 about 8s after login. If a re-add fails the channel must be restored from the chat settings UI."] = "Reparación de canales de WIM ACTIVADA (experimental). En inicios de sesión donde el canal de comunidad se enfoca tarde, WIM quita y vuelve a añadir los canales de comunidad a ChatFrame1 unos 8 segundos después de iniciar sesión. Si volver a añadir un canal falla, debe restaurarse desde la configuración del chat.",
+    ["WIM: attempting a repair now (see /wim debug output)."] = "WIM: intentando una reparación ahora (ver salida de /wim debug).",
+    ["WIM channel re-add repair OFF. No further attempts this session."] = "Reparación de canales de WIM DESACTIVADA. No habrá más intentos en esta sesión.",
+    ["Usage: /wim style [classic|modern]"] = "Uso: /wim style [classic|modern]",
+    ["WIM: the modern options UI is not available on this client."] = "WIM: la interfaz moderna de opciones no está disponible en este cliente.",
+    ["WIM: queued options open canceled."] = "WIM: apertura de opciones en cola cancelada.",
 };
 
 if WIM.getLocale() == "esES" then

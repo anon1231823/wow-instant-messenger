@@ -612,4 +612,15 @@ WIM.AddLocale("ruRU", {
 	["WIM options style: Modern (native Options > AddOns)."] = "Стиль настроек WIM: современный (в настройках игры, раздел «Аддоны»).",
 	["WIM options style: Classic (WIM window)."] = "Стиль настроек WIM: классический (окно WIM).",
 
+
+    -- Slash command feedback --
+    ["WIM: community chat settings unavailable."] = "WIM: настройки чата сообщества недоступны.",
+    ["WIM community stream auto-focus ON. Takes effect at next login."] = "Автофокус каналов сообщества WIM ВКЛЮЧЕН. Вступит в силу при следующем входе.",
+    ["WIM community stream auto-focus OFF - the client may refuse sends to community channels. Takes effect at next login."] = "Автофокус каналов сообщества WIM ВЫКЛЮЧЕН - клиент может отклонять отправку в каналы сообщества. Вступит в силу при следующем входе.",
+    ["WIM channel re-add repair ON (experimental). On logins where the community stream is focused late, WIM removes and re-adds community channels to ChatFrame1 about 8s after login. If a re-add fails the channel must be restored from the chat settings UI."] = "Восстановление каналов WIM ВКЛЮЧЕНО (экспериментально). При входах, когда канал сообщества получает фокус с опозданием, WIM удаляет и заново добавляет каналы сообщества в ChatFrame1 примерно через 8 секунд после входа. Если повторное добавление не удалось, канал нужно восстановить в настройках чата.",
+    ["WIM: attempting a repair now (see /wim debug output)."] = "WIM: попытка восстановления (см. вывод /wim debug).",
+    ["WIM channel re-add repair OFF. No further attempts this session."] = "Восстановление каналов WIM ВЫКЛЮЧЕНО. Больше попыток в этой сессии не будет.",
+    ["Usage: /wim style [classic|modern]"] = "Использование: /wim style [classic|modern]",
+    ["WIM: the modern options UI is not available on this client."] = "WIM: современный интерфейс настроек недоступен на этом клиенте.",
+    ["WIM: queued options open canceled."] = "WIM: отложенное открытие настроек отменено.",
 });

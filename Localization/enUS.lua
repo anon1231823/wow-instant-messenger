@@ -614,4 +614,15 @@ WIM.AddLocale("enUS", {
     ["WIM options style: Modern (native Options > AddOns)."] = true,
     ["WIM options style: Classic (WIM window)."] = true,
 
+
+    -- Slash command feedback --
+    ["WIM: community chat settings unavailable."] = true,
+    ["WIM community stream auto-focus ON. Takes effect at next login."] = true,
+    ["WIM community stream auto-focus OFF - the client may refuse sends to community channels. Takes effect at next login."] = true,
+    ["WIM channel re-add repair ON (experimental). On logins where the community stream is focused late, WIM removes and re-adds community channels to ChatFrame1 about 8s after login. If a re-add fails the channel must be restored from the chat settings UI."] = true,
+    ["WIM: attempting a repair now (see /wim debug output)."] = true,
+    ["WIM channel re-add repair OFF. No further attempts this session."] = true,
+    ["Usage: /wim style [classic|modern]"] = true,
+    ["WIM: the modern options UI is not available on this client."] = true,
+    ["WIM: queued options open canceled."] = true,
 });

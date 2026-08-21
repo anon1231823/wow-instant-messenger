@@ -609,4 +609,15 @@ WIM.AddLocale("itIT", {
 	["WIM options style: Modern (native Options > AddOns)."] = "Stile opzioni di WIM: moderna (nativa, in Opzioni > AddOns).",
 	["WIM options style: Classic (WIM window)."] = "Stile opzioni di WIM: classica (finestra WIM).",
 
+
+    -- Slash command feedback --
+    ["WIM: community chat settings unavailable."] = "WIM: impostazioni della chat di comunità non disponibili.",
+    ["WIM community stream auto-focus ON. Takes effect at next login."] = "Focus automatico dei canali di comunità di WIM ATTIVO. Ha effetto al prossimo accesso.",
+    ["WIM community stream auto-focus OFF - the client may refuse sends to community channels. Takes effect at next login."] = "Focus automatico dei canali di comunità di WIM DISATTIVO - il client potrebbe rifiutare gli invii ai canali di comunità. Ha effetto al prossimo accesso.",
+    ["WIM channel re-add repair ON (experimental). On logins where the community stream is focused late, WIM removes and re-adds community channels to ChatFrame1 about 8s after login. If a re-add fails the channel must be restored from the chat settings UI."] = "Riparazione dei canali di WIM ATTIVA (sperimentale). Negli accessi in cui il canale di comunità riceve il focus in ritardo, WIM rimuove e riaggiunge i canali di comunità a ChatFrame1 circa 8 secondi dopo l'accesso. Se una riaggiunta fallisce, il canale va ripristinato dalle impostazioni della chat.",
+    ["WIM: attempting a repair now (see /wim debug output)."] = "WIM: tentativo di riparazione in corso (vedi l'output di /wim debug).",
+    ["WIM channel re-add repair OFF. No further attempts this session."] = "Riparazione dei canali di WIM DISATTIVA. Nessun altro tentativo in questa sessione.",
+    ["Usage: /wim style [classic|modern]"] = "Uso: /wim style [classic|modern]",
+    ["WIM: the modern options UI is not available on this client."] = "WIM: l'interfaccia moderna delle opzioni non è disponibile su questo client.",
+    ["WIM: queued options open canceled."] = "WIM: apertura delle opzioni in coda annullata.",
 });

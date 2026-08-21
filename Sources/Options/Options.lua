@@ -355,7 +355,7 @@ function ShowModernOptions()
         -- fullscreen panel after the fight.
         if(options._pendingModernOpen) then
             options._pendingModernOpen = nil;
-            _G.DEFAULT_CHAT_FRAME:AddMessage("WIM: queued options open canceled.");
+            _G.DEFAULT_CHAT_FRAME:AddMessage(L["WIM: queued options open canceled."]);
             return;
         end
         options._pendingModernOpen = true;

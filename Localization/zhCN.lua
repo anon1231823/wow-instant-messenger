@@ -611,4 +611,15 @@ WIM.AddLocale("zhCN", {
 	["WIM options style: Modern (native Options > AddOns)."] = "WIM 选项样式：现代（游戏内“选项 > 插件”）。",
 	["WIM options style: Classic (WIM window)."] = "WIM 选项样式：经典（WIM 窗口）。",
 
+
+    -- Slash command feedback --
+    ["WIM: community chat settings unavailable."] = "WIM：社区聊天设置不可用。",
+    ["WIM community stream auto-focus ON. Takes effect at next login."] = "WIM 社区频道自动聚焦已开启。下次登录时生效。",
+    ["WIM community stream auto-focus OFF - the client may refuse sends to community channels. Takes effect at next login."] = "WIM 社区频道自动聚焦已关闭 - 客户端可能拒绝向社区频道发送消息。下次登录时生效。",
+    ["WIM channel re-add repair ON (experimental). On logins where the community stream is focused late, WIM removes and re-adds community channels to ChatFrame1 about 8s after login. If a re-add fails the channel must be restored from the chat settings UI."] = "WIM 频道重加修复已开启（实验性）。当社区频道聚焦过晚时，WIM 会在登录约 8 秒后从 ChatFrame1 移除并重新添加社区频道。如果重新添加失败，需在聊天设置中恢复该频道。",
+    ["WIM: attempting a repair now (see /wim debug output)."] = "WIM：正在尝试修复（参见 /wim debug 输出）。",
+    ["WIM channel re-add repair OFF. No further attempts this session."] = "WIM 频道重加修复已关闭。本次会话不再尝试。",
+    ["Usage: /wim style [classic|modern]"] = "用法：/wim style [classic|modern]",
+    ["WIM: the modern options UI is not available on this client."] = "WIM：此客户端不支持现代选项界面。",
+    ["WIM: queued options open canceled."] = "WIM：已取消排队的选项打开。",
 });
