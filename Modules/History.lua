@@ -1000,6 +1000,13 @@ local function createHistoryViewer()
     -- original art would crop the new glyph.
     local function applyCloseArt(texture, art, blend)
         if(not texture or not art) then return; end
+        -- Corner-button pieces route through the shipped copies on
+        -- clients whose own sheet is low resolution; the helper sets
+        -- its own texcoord window.
+        if(ApplyRedButtonArt(texture, art)) then
+            if(blend) then texture:SetBlendMode(blend); end
+            return;
+        end
         if(string.find(art, "\\", 1, true)) then
             texture:SetTexture(art);
         elseif(getAtlasInfo(art)) then
@@ -1471,12 +1478,20 @@ local function createHistoryViewer()
         end
         if(clear.wimNativeMode) then
             if(not clear.wimSavedArt) then
+                -- The font restores from its file properties, never
+                -- from GetFontObject: a box whose font came in by path
+                -- reports its own anonymous font object there, and
+                -- handing a widget its own font object back creates an
+                -- inheritance cycle the client resolves by infinite
+                -- recursion (a hard STACK_OVERFLOW crash on era).
+                local fontPath, fontSize, fontFlags = box:GetFont();
                 clear.wimSavedArt = {
                     normal = saveTextureState(clear:GetNormalTexture()),
                     pushed = saveTextureState(clear:GetPushedTexture()),
                     width = clear:GetWidth(), height = clear:GetHeight(),
                     points = savePoints(clear), boxPoints = savePoints(box),
-                    fontObject = box:GetFontObject(),
+                    fontPath = fontPath, fontSize = fontSize,
+                    fontFlags = fontFlags,
                     boxHeight = box:GetHeight(),
                 };
             end
@@ -1526,12 +1541,18 @@ local function createHistoryViewer()
             end
             clear:SetSize(saved.width, saved.height);
             clear:SetAlpha(1);
-            box:SetFontObject(saved.fontObject);
+            if(saved.fontPath) then
+                box:SetFont(saved.fontPath, saved.fontSize, saved.fontFlags);
+            end
             box:SetHeight(saved.boxHeight);
             box:SetTextInsets(0, 0, 0, 0);
             win.search.label:Show();
-            restorePoints(box, saved.boxPoints);
+            -- The clear button restores first: in the native style it
+            -- anchors to the box, while the box's saved anchor targets
+            -- the clear button, so restoring the box first creates an
+            -- anchor cycle.
             restorePoints(clear, saved.points);
+            restorePoints(box, saved.boxPoints);
             clear:Show();
         end
     end
@@ -1571,6 +1592,11 @@ local function createHistoryViewer()
         -- right differs from the native -3: this art's right rail core
         -- runs past the window edge (-3.5..+1), and stopping short of
         -- the edge leaves the rail's half-opaque band see-through.
+        -- Clients whose layouts lack this art (classic era) get the
+        -- same frame from the addon's shipped copies of the pieces at
+        -- the same geometry (BuildLiteMetalFrame), so one set of fill
+        -- measurements serves every client.
+        local hasPanelArt = HasPortraitPanelArt();
         chrome.bg:SetPoint("TOPLEFT", 7, -18);
         chrome.bg:SetPoint("BOTTOMRIGHT", 0, 3);
         win.wimChromeBg = chrome.bg;
@@ -1620,8 +1646,7 @@ local function createHistoryViewer()
         stripBottom:SetPoint("BOTTOM", chrome, "BOTTOM", 0, 3);
         win.wimChromeStrips = { stripTop, stripLeft, stripRight, stripBottom };
 
-        if(not (pcall(apply, chrome, "ButtonFrameTemplateNoPortrait")
-                and pcall(apply, insetNav, "InsetFrameTemplate")
+        if(not (pcall(apply, insetNav, "InsetFrameTemplate")
                 and pcall(apply, insetContent, "InsetFrameTemplate"))) then
             chrome:Hide();
             insetNav:Hide();
@@ -1629,7 +1654,27 @@ local function createHistoryViewer()
             dPrint("History Viewer: nine-slice layouts unavailable; keeping the backdrop style.");
             return false;
         end
+        if(hasPanelArt) then
+            if(not pcall(apply, chrome, "ButtonFrameTemplateNoPortrait")) then
+                chrome:Hide();
+                insetNav:Hide();
+                insetContent:Hide();
+                dPrint("History Viewer: nine-slice layouts unavailable; keeping the backdrop style.");
+                return false;
+            end
+        else
+            -- The same frame from the addon's shipped copies of the
+            -- retail pieces, plain top-left corner variant.
+            chrome.metal = BuildLiteMetalFrame(chrome, false);
+        end
 
+        -- Resizing moves the strips; picture backgrounds re-window so
+        -- the image stays continuous.
+        win:HookScript("OnSizeChanged", function()
+            if(chrome:IsShown()) then
+                win.ApplyChromeBackgrounds();
+            end
+        end);
 
         win.wimChrome = chrome;
         win.nav.wimInset = insetNav;
@@ -1647,9 +1692,12 @@ local function createHistoryViewer()
         if(win.wimChromeStrips) then
             for i=1, #win.wimChromeStrips do
                 win.wimChromeStrips[i]:SetShown(cutout);
-                if(cutout) then
-                    ApplyChromeBackgroundChoice(win.wimChromeStrips[i], theme.frame);
-                end
+            end
+            if(cutout) then
+                -- Picture backgrounds window each strip to its part of
+                -- one continuous image (see ApplyChromeBackgroundToStrips).
+                ApplyChromeBackgroundToStrips(win.wimChromeStrips,
+                    win.wimChromeBg, theme.frame);
             end
         end
         if(not cutout) then
@@ -2329,16 +2377,20 @@ local function createHistoryViewer()
             "WowStyle1DropdownTemplate");
         if(ok and dropdown) then
             win.nav.userModern = dropdown;
-            -- Seated over the navigation well's top corners, 2px past
-            -- its edges, so the control's chamfered corners become the
+            DarkenModernDropdown(dropdown);
+            PadModernMenus(dropdown);
+            -- Seated on the navigation well's top edge, 2px past its
+            -- sides, so the control's chamfered corners become the
             -- visual corners and only the dark panel fill sits behind
-            -- the cut. Placed flush against the well, the well's square
-            -- bevel corner shows past the chamfer as a bright notch.
-            dropdown:SetPoint("TOPLEFT", -2, 2);
-            dropdown:SetPoint("TOPRIGHT", 2, 2);
+            -- the cut. Placed flush against the well's sides, the
+            -- well's square bevel corner shows past the chamfer as a
+            -- bright notch.
+            dropdown:SetPoint("TOPLEFT", -2, 0);
+            dropdown:SetPoint("TOPRIGHT", 2, 0);
             dropdown:SetHeight(26);
             dropdown:Hide();
             dropdown:SetupMenu(function(_, rootDescription)
+                DarkenModernMenusOnAcquire(rootDescription);
                 local model = win.nav.user.getMenuModel(true);
                 local function isSelected(value)
                     return win.USER == value and not win.USERSUBSET;
@@ -2405,6 +2457,7 @@ local function createHistoryViewer()
     -- The filter-mode menu in the same modern form, opened from the
     -- filters header as a context menu.
     local function buildModernFilterMenu(_, rootDescription)
+        DarkenModernMenusOnAcquire(rootDescription);
         local mode = win.FILTERMODE or { kind = "days" };
         rootDescription:CreateRadio(L["No Filter"],
             function() return mode.kind ~= "relative" and mode.kind ~= "metric"; end,
@@ -2597,7 +2650,9 @@ local function createHistoryViewer()
     win.nav.filters.header:SetScript("OnClick", function(self)
             local hv = GetSelectedSkin().history_viewer;
             if(canModernMenus and hv and hv.dropdown_style == "modern") then
-                _G.MenuUtil.CreateContextMenu(self, win.BuildModernFilterMenu);
+                PadModernMenus(self);
+                local menu = _G.MenuUtil.CreateContextMenu(self, win.BuildModernFilterMenu);
+                DarkenModernMenus(menu);
             else
                 DDM.ToggleDropDownMenu(1, nil, win.nav.filters.menu, self, 0, 0);
             end
@@ -2621,6 +2676,8 @@ local function createHistoryViewer()
             win.nav.filters, "WowStyle1DropdownTemplate");
         if(ok and dropdown) then
             win.nav.filtersModern = dropdown;
+            DarkenModernDropdown(dropdown);
+            PadModernMenus(dropdown);
             dropdown:SetPoint("TOPLEFT", -2, 0);
             dropdown:SetPoint("TOPRIGHT", 4, 0);
             dropdown:SetHeight(26);
@@ -3793,6 +3850,13 @@ local function createHistoryViewer()
             pb.delete:SetNormalAtlas("RedButton-Exit");
             pb.delete:SetPushedAtlas("RedButton-exit-pressed");
             pb.delete:SetHighlightAtlas("RedButton-Highlight", "ADD");
+            -- Repaint the states through the shared corner-button
+            -- helper, so clients with the low-resolution sheet get the
+            -- shipped 2x pieces here too.
+            ApplyRedButtonArt(pb.delete:GetNormalTexture(), "RedButton-Exit");
+            ApplyRedButtonArt(pb.delete:GetPushedTexture(), "RedButton-exit-pressed");
+            ApplyRedButtonArt(pb.delete:GetHighlightTexture(), "RedButton-Highlight");
+            pb.delete:GetHighlightTexture():SetBlendMode("ADD");
             pb.delete:GetHighlightTexture():SetAlpha(1);
         else
             if(pb.bar.wimTrack) then
@@ -3806,6 +3870,15 @@ local function createHistoryViewer()
             pb.text:SetPoint("BOTTOMLEFT", pb.bar, "TOPLEFT", 0, 5);
             pb.delete:SetNormalTexture("Interface\\AddOns\\"..addonTocName.."\\Modules\\Textures\\xNormal");
             pb.delete:SetPushedTexture("Interface\\AddOns\\"..addonTocName.."\\Modules\\Textures\\xPressed");
+            -- Setting a file does not reset texture coordinates; the
+            -- modern branch windows these states into padded art.
+            local deleteStates = { pb.delete:GetNormalTexture(),
+                pb.delete:GetPushedTexture() };
+            for i = 1, #deleteStates do
+                if(deleteStates[i]) then
+                    deleteStates[i]:SetTexCoord(0, 1, 0, 1);
+                end
+            end
             local highlight = pb.delete:GetHighlightTexture();
             if(highlight) then
                 highlight:SetAlpha(0);

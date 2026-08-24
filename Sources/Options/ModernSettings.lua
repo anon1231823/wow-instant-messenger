@@ -6,6 +6,7 @@ local tostring = tostring;
 local string = string;
 local table = table;
 local type = type;
+local math = math;
 local select = select;
 
 -- Defined before the setfenv: C_Texture.GetAtlasInfo resolves the
@@ -211,10 +212,27 @@ function ui.Header(layout, name, tooltip)
     layout:AddInitializer(_G.CreateSettingsListSectionHeaderInitializer(name, tooltip));
 end
 
-function ui.Button(layout, name, buttonText, onClick, tooltip)
+function ui.Button(layout, name, buttonText, onClick, tooltip, enabledPredicate)
     if (_G.CreateSettingsButtonInitializer) then
-        layout:AddInitializer(_G.CreateSettingsButtonInitializer(
-            name, buttonText, onClick, tooltip, true));
+        local init = _G.CreateSettingsButtonInitializer(
+            name, buttonText, onClick, tooltip, true);
+        if (enabledPredicate) then
+            if (init.AddModifyPredicate) then
+                init:AddModifyPredicate(enabledPredicate);
+            end
+            -- Some clients' settings code ignores modify predicates on
+            -- button rows; enforcing the state as the row initializes
+            -- covers them all.
+            local origInitFrame = init.InitFrame;
+            init.InitFrame = function(self, frame)
+                origInitFrame(self, frame);
+                local button = frame and frame.Button;
+                if (button and button.SetEnabled) then
+                    button:SetEnabled(enabledPredicate() and true or false);
+                end
+            end;
+        end
+        layout:AddInitializer(init);
     end
 end
 
@@ -264,7 +282,11 @@ function ui.Custom(layout, template, data)
     else
         init = Settings.CreateElementInitializer(template, data);
     end
-    if (data and data.extent) then
+    if (data and data.getExtent) then
+        -- Measured at display time, so rows sized by localized text ask
+        -- for the height that text actually needs.
+        init.GetExtent = data.getExtent;
+    elseif (data and data.extent) then
         init.GetExtent = function() return data.extent; end;
     end
     layout:AddInitializer(init);
@@ -413,8 +435,21 @@ end
 -- like every other custom row.
 local BUG_REPORT_URL = "https://github.com/Legacy-of-Sylvanaar/wow-instant-messenger/issues";
 
+-- The usable row width in the settings list, for sizing wrapped text.
+-- Falls back to the panel's usual width when the list is not built yet.
+local function settingsListWidth()
+    local panel = _G.SettingsPanel;
+    local list = panel and panel.Container and panel.Container.SettingsList;
+    local box = list and list.ScrollBox;
+    local width = box and box:GetWidth() or 0;
+    if (width <= 0) then
+        width = 600;
+    end
+    return width;
+end
+
 local bugReportHolder;
-local function bugReportRowInit(row)
+local function ensureBugReportHolder()
     if (not bugReportHolder) then
         local holder = CreateFrame("Frame");
         holder:Hide();
@@ -435,7 +470,14 @@ local function bugReportRowInit(row)
         local icon = panel:CreateTexture(nil, "ARTWORK");
         icon:SetSize(34, 34);
         icon:SetPoint("TOPLEFT", 12, -12);
-        icon:SetTexture("Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew");
+        -- The new-style alert icon is retail art; clients without the
+        -- file keep the standard dialog alert icon instead of showing a
+        -- missing texture.
+        local alertIcon = "Interface\\DialogFrame\\UI-Dialog-Icon-AlertNew";
+        if (_G.GetFileIDFromPath and not _G.GetFileIDFromPath(alertIcon)) then
+            alertIcon = "Interface\\DialogFrame\\UI-Dialog-Icon-AlertIcon";
+        end
+        icon:SetTexture(alertIcon);
 
         local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge");
         title:SetPoint("TOPLEFT", icon, "TOPRIGHT", 10, -2);
@@ -460,10 +502,14 @@ local function bugReportRowInit(row)
                 text = L["Press Ctrl+C to copy the link, then open it in your browser."],
                 button1 = _G.CLOSE,
                 hasEditBox = 1,
-                editBoxWidth = 330,
+                -- 260 is the classic GameDialog's edit box cap; a wider
+                -- request makes that client widen the dialog from its
+                -- stale pooled width and the box overflows the frame.
+                editBoxWidth = 260,
                 OnShow = function(self)
                     local name = self:GetName();
-                    local editBox = self.editBox or (name and _G[name.."EditBox"]);
+                    local editBox = self.EditBox or self.editBox
+                        or (name and _G[name.."EditBox"]);
                     if (editBox) then
                         editBox:SetText(BUG_REPORT_URL);
                         editBox:HighlightText();
@@ -494,13 +540,32 @@ local function bugReportRowInit(row)
             _G.GameTooltip:Hide();
         end);
 
+        holder.wimTitle = title;
+        holder.wimBody = body;
         bugReportHolder = holder;
     end
-    options.AttachRowHolder(row, bugReportHolder);
+    return bugReportHolder;
+end
+
+local function bugReportRowInit(row)
+    options.AttachRowHolder(row, ensureBugReportHolder());
+end
+
+-- Measured from the localized text, never smaller than the template
+-- height, so verbose translations get the room they need. The width
+-- terms mirror the anchors above: 37px panel insets, a 12+34+10 icon
+-- column, and a 12px right pad.
+local function bugReportExtent()
+    local holder = ensureBugReportHolder();
+    holder.wimBody:SetWidth(settingsListWidth() - 74 - 56 - 12);
+    local height = 16 + holder.wimTitle:GetStringHeight() + 4
+        + holder.wimBody:GetStringHeight() + 8 + 24 + 10 + 8;
+    holder.wimBody:SetWidth(0);
+    return math.max(104, math.ceil(height));
 end
 
 local creditsHolder;
-local function creditsRowInit(row)
+local function ensureCreditsHolder()
     if (not creditsHolder) then
         local holder = CreateFrame("Frame");
         holder:Hide();
@@ -524,9 +589,34 @@ local function creditsRowInit(row)
         thanksText:SetJustifyH("LEFT");
         thanksText:SetText(creditsText[2] or "");
 
+        holder.wimCreated = created;
+        holder.wimCreatedText = createdText;
+        holder.wimThanks = thanks;
+        holder.wimThanksText = thanksText;
         creditsHolder = holder;
     end
-    options.AttachRowHolder(row, creditsHolder);
+    return creditsHolder;
+end
+
+local function creditsRowInit(row)
+    options.AttachRowHolder(row, ensureCreditsHolder());
+end
+
+-- The template's fixed height clipped the credits once the translator
+-- list grew. Measure the wrapped text instead; the width term mirrors
+-- the 37px insets above.
+local function creditsExtent()
+    local holder = ensureCreditsHolder();
+    local width = settingsListWidth() - 74;
+    holder.wimCreatedText:SetWidth(width);
+    holder.wimThanksText:SetWidth(width);
+    local height = 6 + holder.wimCreated:GetStringHeight() + 4
+        + holder.wimCreatedText:GetStringHeight() + 8
+        + holder.wimThanks:GetStringHeight() + 4
+        + holder.wimThanksText:GetStringHeight() + 16;
+    holder.wimCreatedText:SetWidth(0);
+    holder.wimThanksText:SetWidth(0);
+    return math.max(120, math.ceil(height));
 end
 
 local function registerCategory()
@@ -572,14 +662,27 @@ local function registerCategory()
                 return not SkinLocksOptionsStyle();
             end);
         end
+        -- Some clients' settings code ignores modify predicates on
+        -- button rows; enforcing the state as the row initializes
+        -- covers them all.
+        local origInitFrame = classicButton.InitFrame;
+        classicButton.InitFrame = function(self, frame)
+            origInitFrame(self, frame);
+            local button = frame and frame.Button;
+            if (button and button.SetEnabled) then
+                button:SetEnabled(not SkinLocksOptionsStyle());
+            end
+        end;
         layout:AddInitializer(classicButton);
     end
 
     -- Bug-report callout and credits on the root page.
     ui.Header(layout, L["Report a Bug"]);
-    ui.Custom(layout, "WIM3SettingsBugReportTemplate", { onInit = bugReportRowInit });
+    ui.Custom(layout, "WIM3SettingsBugReportTemplate",
+        { onInit = bugReportRowInit, getExtent = bugReportExtent });
     ui.Header(layout, L["Credits"]);
-    ui.Custom(layout, "WIM3SettingsCreditsTemplate", { onInit = creditsRowInit });
+    ui.Custom(layout, "WIM3SettingsCreditsTemplate",
+        { onInit = creditsRowInit, getExtent = creditsExtent });
 
     -- Build the option pages (Sources/Options/ModernOptions.lua).
     for i = 1, #pageBuilders do
